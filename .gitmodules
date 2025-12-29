@@ -1,0 +1,9 @@
+[submodule "flextools"]
+	path = flextools
+	url = https://github.com/Samuel-DEVULDER/flextools.git
+[submodule "ESCParser_FX80"]
+	path = ESCParser_FX80
+	url = https://github.com/Samuel-DEVULDER/ESCParser_FX80.git
+[submodule "Apollo_7_Squale_Forth83"]
+	path = Apollo_7_Squale_Forth83
+	url = https://github.com/Samuel-DEVULDER/Apollo_7_Squale_Forth83.git
