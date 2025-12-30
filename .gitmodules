@@ -7,3 +7,9 @@
 [submodule "Apollo_7_Squale_Forth83"]
 	path = Apollo_7_Squale_Forth83
 	url = https://github.com/Samuel-DEVULDER/Apollo_7_Squale_Forth83.git
+[submodule "SQpix/stb"]
+	path = SQpix/stb
+	url = https://github.com/nothings/stb.git
+[submodule "SQpix/exomizer"]
+	path = SQpix/exomizer
+	url = https://github.com/bitshifters/exomizer.git
