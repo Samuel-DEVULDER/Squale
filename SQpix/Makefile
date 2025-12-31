@@ -25,6 +25,7 @@ ifeq ($(OS),win)
 endif
 
 ALL=sqpix$(EXE)
+
 all: $(ALL)
 	ls -l $<
 
@@ -51,7 +52,7 @@ myclean:
 	-@$(RM) $(BIN) $(OBJS) $(SHARED_OBJS) $(ALL:$(EXE)=.o) $(ALL)
 	-@cd $(EXO2) && $(MAKE) -f Makefile clean
 
-samples: $(ALL) 
+test: $(ALL) 
 	@for i in samples/*.{png,jpg}; do\
 		x=`echo $$i | sed -e s/[\\.].*$$/.sqp/`; \
 		./$(ALL) -x -v -b --pgm "$$i" -o "$$x"; \
