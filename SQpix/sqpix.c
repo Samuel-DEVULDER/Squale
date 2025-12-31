@@ -10,10 +10,17 @@
 #include "stb/stb_image.h"
 #include "stb/stb_ds.h"
 
-#define PRIVATE 
-//static
+#include "membuf_io.h"
+#include "exo_helper.h"
 
-PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0;
+#ifndef TRUE
+#define TRUE    1
+#define FALSE   0
+#endif
+
+#define PRIVATE static
+
+PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0, pgm = 0;
 PRIVATE char *input_file, *output_file;
 
 typedef float vec3[3];
@@ -444,6 +451,7 @@ typedef struct {
 	uint8_t *sRGB;
 	uint8_t bitmap[65536];
 	struct timeval time;
+	int saved_size;
 } pic;
 
 PRIVATE float pic_done(pic *pic) {
@@ -465,7 +473,11 @@ PRIVATE float pic_done(pic *pic) {
 	}
 		
 	if(verbose) {
-		printf("done (%.1fms)\n", secs*1000.0f);
+		if(secs<0.0001) printf("done (%.1fus", secs*1000000.0f);
+		else if(secs<1) printf("done (%.1fms", secs*1000.0f);
+		else            printf("done (%.1fs",  secs);
+		if(pic->saved_size>0) printf(", %d bytes", pic->saved_size);
+		printf(")\n");
 	}
 	
 	return secs;
@@ -475,6 +487,7 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 	int n;
 	
 	gettimeofday(&pic->time, NULL);
+	pic->saved_size = 0;
 	
 	if(!stbi_info(filename, &pic->w, &pic->h, &n)) {
 		fprintf(stderr, "Unsupported image: %s\n", filename);
@@ -504,14 +517,27 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		const char *s = filename;
 		while(*s) ++s;
 		while(s>filename && *s!='/' && *s!='\\') --s;
-		printf("saving (%s)...", s);
+		if(s>filename) ++s;
+		printf("saving %s...", s);
 		fflush(stdout);
 	}
 	
 	fprintf(f, exo ? "SQP\2" : "SQP\1");
 	
 	if(exo) {
+		struct membuf inbuf[1];
+		struct membuf outbuf[1];
+		struct crunch_info info[1];
+		static struct crunch_options options[1] = { CRUNCH_OPTIONS_DEFAULT };	
 		
+		membuf_init(outbuf);
+		membuf_init(inbuf);
+		membuf_append(inbuf, pic->bitmap, sizeof(pic->bitmap));
+	        crunch(inbuf, outbuf, options, info);
+		
+		fwrite(membuf_get(outbuf), 1, membuf_memlen(outbuf), f);
+		membuf_free(outbuf);
+		membuf_free(inbuf);
 	} else {
 		int i;
 		for(i=0; i<65536; i+=2) {
@@ -519,6 +545,8 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		}
 	}
 	fflush(f);
+	pic->saved_size = ftell(f);
+
 	fclose(f);
 }
 
@@ -529,6 +557,11 @@ PRIVATE void pic_save_pgm(pic *pic, const char *filename) {
 	if(f==NULL) {
 		perror(filename);
 		return;
+	}
+	
+	if(verbose) {
+		printf("saving pgm...");
+		fflush(stdout);
 	}
 	
 	fprintf(f, "P3\n256 256\n255\n");
@@ -673,10 +706,11 @@ PRIVATE void init(void) {
 PRIVATE void usage(char *av0) {
 	printf("Usage: %s [options] <inputimage.ext> -o <outputfile.ext>\n", av0);
 	printf("options:\n");
-	printf(" -h : prints this help\n");
-	printf(" -v : verbose\n");
-	printf(" -x : compresses with exomizer\n");
-	printf(" -b : bayer dithering\n");
+	printf(" -h    : prints this help\n");
+	printf(" -v    : verbose\n");
+	printf(" -x    : compresses with exomizer\n");
+	printf(" -b    : bayer dithering\n");
+	printf(" --pgm : output pgm image (for preview)\n");
 	exit(0);
 }
 
@@ -693,6 +727,8 @@ PRIVATE void parse(int ac, char **av) {
 			exo = 1;
 		else if(!strcmp("-b", av[i])) 
 			bayer = 1;
+		else if(!strcmp("--pgm", av[i])) 
+			pgm = 1;
 		else if(!strcmp("-o", av[i]) && i<ac-1)
 			output_file = av[++i];
 		else if(input_file==NULL)
@@ -724,8 +760,16 @@ int main(int ac, char **av) {
 		pic_load(&pic, input_file);
 		pic_conv_h(NULL);
 		pic_conv_h(&pic);
-		pic_save_pgm(&pic, "toto.pgm");
 		pic_save(&pic, output_file);
+		if(pgm) {
+			char *s = malloc(strlen(output_file)+5);
+			if(s) {
+				strcpy(s, output_file);
+				strcat(s, ".pgm");
+				pic_save_pgm(&pic, s);
+				free(s);
+			}
+		}
 		pic_done(&pic);
 	} while(0);
 	
