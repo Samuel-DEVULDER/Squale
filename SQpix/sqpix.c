@@ -483,6 +483,13 @@ PRIVATE float pic_done(pic *pic) {
 	return secs;
 }
 
+PRIVATE const char *basename(const char *s) {
+	const char *t = s;
+	while(*t) ++t;
+	while(t>s && t[-1]!='/' && t[-1]!='\\') --t;
+	return t;
+}
+
 PRIVATE void pic_load(pic *pic, const char *filename) {
 	int n;
 	
@@ -493,11 +500,14 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 		fprintf(stderr, "Unsupported image: %s\n", filename);
 		exit(-1);
 	}
-	if(verbose) {
-		printf("%s (%dx%d)...", filename, pic->w, pic->h);
+	
+	if(verbose) {	
+		printf("%s (%dx%d)...", basename(filename), pic->w, pic->h);
 		fflush(stdout);
 	}
+	
 	pic->sRGB = stbi_load(filename, &pic->w, &pic->h, &n, 3);
+	
 	if(pic->sRGB == NULL)  {
 		if(verbose) printf("error\n");
 		else fprintf(stderr, "Error while loading: %s\n", filename);
@@ -514,11 +524,7 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 	}
 	
 	if(verbose) {
-		const char *s = filename;
-		while(*s) ++s;
-		while(s>filename && *s!='/' && *s!='\\') --s;
-		if(s>filename) ++s;
-		printf("saving %s...", s);
+		printf("saving %s...", basename(filename));
 		fflush(stdout);
 	}
 	
