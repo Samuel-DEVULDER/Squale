@@ -9,6 +9,7 @@
 
 #include "stb/stb_image.h"
 #include "stb/stb_ds.h"
+#include "stb/stb_image_resize2.h"
 
 #include "membuf_io.h"
 #include "exo_helper.h"
@@ -19,6 +20,9 @@
 #endif
 
 #define PRIVATE static
+
+#define FULL_INTENSITY	255
+#define HALF_INTENSITY	187
 
 PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0, pgm = 0;
 PRIVATE char *input_file, *output_file;
@@ -64,9 +68,6 @@ typedef struct tetra {
 	vec3 n012, n023, n031, n132;
 	struct tetra *prev, *next;
 } tetra;
-
-#define FULL	1.0f
-#define HALF	0.542574163422f
 
 PRIVATE color palette[15];
 
@@ -512,7 +513,34 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 		if(verbose) printf("error\n");
 		else fprintf(stderr, "Error while loading: %s\n", filename);
 		exit(-1);
-	}	
+	}
+	
+#ifdef STBIR_INCLUDE_STB_IMAGE_RESIZE2_H
+	if(pic->w > pic->h) {
+		int w = 256, h = (pic->h*w*2+1)/(2*pic->w);
+		uint8_t *buf = stbir_resize_uint8_srgb(
+			pic->sRGB, pic->w, pic->h,0,
+			NULL,w,h,0, STBIR_RGB);
+		if(buf) {
+			free(pic->sRGB);
+			pic->sRGB = buf;
+			pic->w = w;
+			pic->h = h;
+		}
+	} else if(pic->h > pic->w 
+	       || pic->h != 256) {
+		int h = 256, w = (pic->w*h*2+1)/(2*pic->h);
+		uint8_t *buf = stbir_resize_uint8_srgb(
+			pic->sRGB, pic->w, pic->h,0,
+			NULL,w,h,0, STBIR_RGB);
+		if(buf) {
+			free(pic->sRGB);
+			pic->sRGB = buf;
+			pic->w = w;
+			pic->h = h;
+		}
+	} 
+#endif
 }
 
 PRIVATE void pic_save(pic *pic, const char *filename) {
@@ -523,7 +551,7 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		return;
 	}
 	
-	if(verbose) {
+	if(verbose>1) {
 		printf("saving %s...", basename(filename));
 		fflush(stdout);
 	}
@@ -565,14 +593,14 @@ PRIVATE void pic_save_pgm(pic *pic, const char *filename) {
 		return;
 	}
 	
-	if(verbose) {
+	if(verbose>1) {
 		printf("saving pgm...");
 		fflush(stdout);
 	}
 	
 	fprintf(f, "P3\n256 256\n255\n");
 	for(i=0;i<65536;++i) {
-		int c = pic->bitmap[i]>=8 ? 187 : 255;
+		int c = pic->bitmap[i]>=8 ? HALF_INTENSITY : FULL_INTENSITY;
 		fprintf(f, "%d %d %d\n", 
 			pic->bitmap[i] & 4 ? 0 : c,
 			pic->bitmap[i] & 2 ? 0 : c,
@@ -581,22 +609,27 @@ PRIVATE void pic_save_pgm(pic *pic, const char *filename) {
 	fclose(f);
 }
 
-PRIVATE vec3 *pic_get_linear_color(pic *pic, int x, int y, vec3 *ret) {
-	static float sRGB[256];
+PRIVATE float sRGB2lin(uint8_t sRGB) {
+	static float tab[256];
 	
-	if(sRGB[255]==0) {
+	if(tab[255]==0) {
 		int i;
 		for(i=0;i<256;++i) {
 			float x = i/255.0f;
-			sRGB[i] = x<=0.04045f ? x/12.92f : powf((x+0.055f)/1.055f, 2.4f);
+			tab[i] = x<=0.04045f ? x/12.92f : powf((x+0.055f)/1.055f, 2.4f);
 		}
 	}
+	
+	return tab[sRGB];
+}	
+
+PRIVATE vec3 *pic_get_linear_color(pic *pic, int x, int y, vec3 *ret) {
 	
 	if(x<0 || y<0 || x>=pic->w || y>=pic->h) {
 		vec3_set(ret, 0,0,0);
 	} else {
 		uint8_t *img = pic->sRGB + 3*(pic->w*y + x);
-		vec3_set(ret, sRGB[img[0]], sRGB[img[1]], sRGB[img[2]]);
+		vec3_set(ret, sRGB2lin(img[0]), sRGB2lin(img[1]), sRGB2lin(img[2]));
 	}
 	
 	// vec3_set(ret, sRGB[112], sRGB[23], sRGB[25]);
@@ -619,6 +652,12 @@ PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
 PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 	int x1, y1, x2, y2, i, j;
 	float k; vec3 p;
+	
+	if((pic->w==256 && pic->w>=pic->h)
+	|| (pic->h==256 && pic->h>=pic->w)) {
+		squale_coord(pic, x,y, &x1, &y1);
+		return pic_get_linear_color(pic, x1, y1, ret);
+	}	
 	
 	squale_coord(pic, x-1,y-1, &x1, &y1);
 	squale_coord(pic, x+1,y+1, &x2, &y2);
@@ -683,19 +722,25 @@ PRIVATE void pic_conv_l(pic *pic) {
 
 PRIVATE void init(void) {
 	static uint16_t tetras_desc[] = {
-		 0x0518, 0x0458, 0x0248, 0x4268, 
-		 0x0328, 0x0138, 0x1389, 0x5189, 
-		 0x682A, 0x328A, 0x3A8B, 0x8A7B, 
-		 0x879B, 0x389B, 0x584C, 0x486C, 
-		 0x87CD, 0x58CD, 0x897D, 0x598D, 
-		 0x78CE, 0x6C8E, 0x68AE, 0x7A8E
+		0x0518, 0x0458, 0x0248, 0x4268, 
+		0x0328, 0x0138, 0x1389, 0x5189, 
+		0x682A, 0x328A, 0x3A8B, 0x8A7B, 
+		0x879B, 0x389B, 0x584C, 0x486C, 
+		0x87CD, 0x58CD, 0x897D, 0x598D, 
+		0x78CE, 0x6C8E, 0x68AE, 0x7A8E
+		// 0x0138, 0x0248, 0x4268, 0x0518, 
+		// 0x0458, 0x0328, 0x1389, 0x1859, 
+		// 0x283A, 0x268A, 0x78AB, 0x798B, 
+		// 0x389B, 0x3A8B, 0x486C, 0x458C, 
+		// 0x859D, 0x789D, 0x7C8D, 0x8C5D, 
+		// 0x8A6E, 0x7A8E, 0x78CE, 0x86CE
 	};
 	int i;
 	
 	stbds_rand_seed(time(0));	
 	
 	for(i=0; i<15; ++i) {
-		float c = i>=8 ? HALF : FULL;
+		float c = sRGB2lin(i>=8 ? HALF_INTENSITY : FULL_INTENSITY);
 		set_palette(i, i&4 ? 0.0f : c,
 		               i&2 ? 0.0f : c,
 			       i&1 ? 0.0f : c);

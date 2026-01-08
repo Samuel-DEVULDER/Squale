@@ -13,3 +13,6 @@
 [submodule "SQpix/exomizer"]
 	path = SQpix/exomizer
 	url = https://github.com/bitshifters/exomizer.git
+[submodule "SQpix/A09"]
+	path = SQpix/A09
+	url = https://github.com/Arakula/A09.git
