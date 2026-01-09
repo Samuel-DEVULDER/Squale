@@ -127,7 +127,7 @@ hny_clean:
 
 SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@echo "Building $@..."
-	@echo >STARTUP.TXT $(CMD) $*.SQP
+	@echo >STARTUP.TXT $(CMD) $*.SQP: CAT :
 	@$(FLEXFLOPPY) --out $@ --tracks 26 --label HAPPY --number 2026 --new --rompack
 	@$(FLEXFLOPPY) --in  "$@" --add forth.dir/$(FLEX_SYS)
 	@$(FLEXFLOPPY) --in  "$@" --add STARTUP.TXT
