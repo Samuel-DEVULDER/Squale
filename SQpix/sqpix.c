@@ -971,30 +971,34 @@ PRIVATE void init(void) {
 PRIVATE void usage(char *av0) {
 	printf("Usage: %s [options] <inputimage.ext>\n", av0);
 	printf("options:\n");
-	printf(" -h        : Prints this help\n");
-	printf(" -v        : Verbose\n");
-	printf(" -o <name> : Specify output file\n");
-	printf(" --exo -z  : Compresses with exomizer\n");
-	printf(" --png     : Output png image (for preview)\n");
-	printf(" --pgm     : Output pgm image (for preview)\n");
-	printf(" --vac     : Void and cluster (dither)\n");
-	printf(" --checks  : Checkerboard 2x1 (dither)\n");
-	printf(" --o2x2    : Ordered 2x2 (dispersed)\n");
-	printf(" --o3x3    : Ordered 3x3 (dispersed)\n");
-	printf(" --o4x4 -x : Ordered 4x4 (dispersed)\n");
-	printf(" --o8x8    : Ordered 8x8 (dispersed)\n");
-	printf(" --h4x4a   : Halftone 4x4 (angled)\n");
-	printf(" --h6x6a   : Halftone 6x6 (angled)\n");
-	printf(" --h8x8a   : Halftone 8x8 (angled)\n");
-	printf(" --h4x4o   : Halftone 4x4 (orthogonal)\n");
-	printf(" --h6x6o   : Halftone 6x6 (orthogonal)\n");
-	printf(" --h8x8o   : Halftone 8x8 (orthogonal)\n");
-	printf(" --c5x5b   : Circles 5x5 (black)\n");
-	printf(" --c6x6b   : Circles 6x6 (black)\n");
-	printf(" --c7x7b   : Circles 7x7 (black)\n");
-	printf(" --c5x5w   : Circles 5x5 (white)\n");
-	printf(" --c6x6w   : Circles 6x6 (white)\n");
-	printf(" --c7x7w   : Circles 7x7 (white)\n");
+	printf(" ?, -h, --help\n"
+               "            : Prints this help\n");
+
+	printf(" -v         : Verbose\n");
+	printf(" -o <name>  : Specify output file\n");
+
+	printf(" --exo, -z  : Compresses with exomizer\n");
+	printf(" --png      : Output png image (for preview)\n");
+	printf(" --pgm      : Output pgm image (for preview)\n");
+
+	printf(" --vac      : Void and cluster (dither)\n");
+	printf(" --checks   : Checkerboard 2x1 (dither)\n");
+	printf(" --o2x2     : Ordered 2x2 (dispersed)\n");
+	printf(" --o3x3     : Ordered 3x3 (dispersed)\n");
+	printf(" --o4x4, -x : Ordered 4x4 (dispersed)\n");
+	printf(" --o8x8     : Ordered 8x8 (dispersed)\n");
+	printf(" --h4x4a    : Halftone 4x4 (angled)\n");
+	printf(" --h6x6a    : Halftone 6x6 (angled)\n");
+	printf(" --h8x8a    : Halftone 8x8 (angled)\n");
+	printf(" --h4x4o    : Halftone 4x4 (orthogonal)\n");
+	printf(" --h6x6o    : Halftone 6x6 (orthogonal)\n");
+	printf(" --h8x8o    : Halftone 8x8 (orthogonal)\n");
+	printf(" --c5x5b    : Circles 5x5 (black)\n");
+	printf(" --c6x6b    : Circles 6x6 (black)\n");
+	printf(" --c7x7b    : Circles 7x7 (black)\n");
+	printf(" --c5x5w    : Circles 5x5 (white)\n");
+	printf(" --c6x6w    : Circles 6x6 (white)\n");
+	printf(" --c7x7w    : Circles 7x7 (white)\n");
 	exit(0);
 }
 
