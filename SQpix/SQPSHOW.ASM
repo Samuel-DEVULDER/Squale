@@ -90,58 +90,64 @@ PUTC    JMP     $F10F   ; fast monitor
 GETC    JMP     $F106   ; fast monitor
 KTST    JMP     $F10C   ; fast monitor
 
-PSET2   TFR     A,B
-        BSR     *+2         
-        LDA     #16
-        MUL
-* AFFICHE le pixel en Y et l'avance  de  1        
-PSET    PSHS    D,X
+PSET2   LEAY    -2,Y
+        PSHS    CC,D,X
+        LEAX    <COORD,PCR
+
+        LSRA
+        LSRA
+        LSRA
+        LSRA
         SWI     
         FCB     $24
-        LEAX    <COORD,PCR
+
         TFR     Y,D
-        COMA
         STA     3,X
         STB     1,X
         SWI
         FCB     $2A
-        LEAY    1,Y
-        PULS    D,X,PC
-COORD   FDB     0,0     
-        FDB     0,0
+
+        LDA     1,S
+        ANDA    #15
+        SWI     
+        FCB     $24
+
+        INC     1,X
+        SWI
+        FCB     $2A
+        PULS    CC,D,X,PC
 
 * 2 pixels par octets
-SQP_0   LDY     #0
-LOOP    SET     *
-        BSR     READ
+SQP1    BSR     READ
         BSR     PSET2
-        BNE     LOOP      
+        BNE     SQP1
+
         BSR     WAIT
-        BSR     CLS
-        
+        BSR     CLS        
 EXIT    BSR     CLOSE
         BSR     CURSON
         JMP     WARMS
 
 * EXOMIZER compression
-SQP_1   LDY     #0
+SQP2
 
 SHOWSQP BSR     READ
         CMPA    #'S
-        BNE     BAD_SQP
+        BNE     BADSQP
         BSR     READ
         CMPA    #'Q
-        BNE     BAD_SQP
+        BNE     BADSQP
         BSR     READ
         CMPA    #'P
-        BNE     BAD_SQP
+        BNE     BADSQP
+        LDY     #0
         BSR     CURSOFF
         BSR     READ
         DECA    
-        BEQ     SQP_0
+        BEQ     SQP1
         DECA
-        BEQ     SQP_1
-        BRA     BAD_SQP        
+        BEQ     SQP2
+BADSQP  BRA     BAD_SQP        
 
 * Lit un octet
 READ    PSHS    X
@@ -157,6 +163,19 @@ READ_DONE
 READ_ERR
         LEAS    4,S
         BRA     DOS_ERR
+
+PSET    PSHS    D,X
+        SWI     
+        FCB     $24
+        LEAX    <COORD,PCR
+        TFR     Y,D
+        STA     3,X
+        STB     1,X
+        SWI
+        FCB     $2A
+        PULS    D,X,PC
+COORD   FDB     0,0     
+        FDB     0,0
 
 * ouvre le  fichier
 CLOSE   LDX     #0
@@ -187,11 +206,11 @@ LOOP    SET     *
 ; ———— Gestion des Erreurs ————
 DOS_ERR JSR     RPTERR
         LBSR    BEEP
-        BRA     EXIT
+        LBRA    EXIT
         
 BAD_SQP	LEAX	<BAD_SQP_MSG,PCR
 PUTS    JMP     PSTRING
-	BRA     EXIT
+	LBRA    EXIT
 BAD_SQP_MSG
         FCC     "BAD SPQ FILE"
         FCB     4

@@ -7,9 +7,11 @@
 #include <sys/time.h>
 #include <math.h>
 
-#include "stb/stb_image.h"
 #include "stb/stb_ds.h"
+
+#include "stb/stb_image.h"
 #include "stb/stb_image_resize2.h"
+#include "stb/stb_image_write.h"
 
 #include "membuf_io.h"
 #include "exo_helper.h"
@@ -24,7 +26,7 @@
 #define FULL_INTENSITY	255
 #define HALF_INTENSITY	187
 
-PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0, pgm = 0;
+PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file;
 
 typedef float vec3[3];
@@ -563,20 +565,26 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		struct membuf outbuf[1];
 		struct crunch_info info[1];
 		static struct crunch_options options[1] = { CRUNCH_OPTIONS_DEFAULT };	
-		
-		membuf_init(outbuf);
+		int i = 65536;
+
 		membuf_init(inbuf);
-		membuf_append(inbuf, pic->bitmap, sizeof(pic->bitmap));
-	        crunch(inbuf, outbuf, options, info);
-		
+		do {
+			i -= 1;
+			membuf_append(inbuf, &pic->bitmap[i^0xFF00], 1);
+		} while(i);
+
+		membuf_init(outbuf);
+	        crunch_backwards(inbuf, outbuf, options, info);		
 		fwrite(membuf_get(outbuf), 1, membuf_memlen(outbuf), f);
 		membuf_free(outbuf);
+		
 		membuf_free(inbuf);
 	} else {
-		int i;
-		for(i=0; i<65536; i+=2) {
-			fputc(pic->bitmap[i]*16+pic->bitmap[i+1], f);
-		}
+		int i = 65536;
+		do {
+			i -= 2;
+			fputc(pic->bitmap[i^0xFF00]*16+pic->bitmap[(i^0xFF00)+1], f);
+		} while(i);
 	}
 	fflush(f);
 	pic->saved_size = ftell(f);
@@ -608,6 +616,39 @@ PRIVATE void pic_save_pgm(pic *pic, const char *filename) {
 	}
 	fclose(f);
 }
+
+PRIVATE void pic_save_png(pic *pic, const char *filename) {
+	FILE *f = fopen(filename, "wt");
+	uint8_t *buf = malloc(3*256*256), *rgb = buf;
+	int i;
+
+	if(buf==NULL) return;
+	
+	if(f==NULL) {
+		perror(filename);
+		return;
+	}
+	
+	if(verbose>1) {
+		printf("saving png...");
+		fflush(stdout);
+	}
+	
+	for(i=0;i<65536;++i) {
+		int c = pic->bitmap[i]>=8 ? HALF_INTENSITY : FULL_INTENSITY;
+		*rgb++ = pic->bitmap[i] & 4 ? 0 : c;
+		*rgb++ = pic->bitmap[i] & 2 ? 0 : c;
+		*rgb++ = pic->bitmap[i] & 1 ? 0 : c;
+	}
+
+	stbi_write_force_png_filter = 0;
+	stbi_write_png_compression_level = 1024;
+	stbi_write_png(filename, 256, 256, 3, buf, 3*256);
+     
+	free(buf);
+	fclose(f);
+}
+
 
 PRIVATE float sRGB2lin(uint8_t sRGB) {
 	static float tab[256];
@@ -762,6 +803,7 @@ PRIVATE void usage(char *av0) {
 	printf(" -x    : compresses with exomizer\n");
 	printf(" -b    : bayer dithering\n");
 	printf(" --pgm : output pgm image (for preview)\n");
+	printf(" --png : output png image (for preview)\n");
 	exit(0);
 }
 
@@ -780,6 +822,8 @@ PRIVATE void parse(int ac, char **av) {
 			bayer = 1;
 		else if(!strcmp("--pgm", av[i])) 
 			pgm = 1;
+		else if(!strcmp("--png", av[i])) 
+			png = 1;
 		else if(!strcmp("-o", av[i]) && i<ac-1)
 			output_file = av[++i];
 		else if(input_file==NULL)
@@ -818,6 +862,15 @@ int main(int ac, char **av) {
 				strcpy(s, output_file);
 				strcat(s, ".pgm");
 				pic_save_pgm(&pic, s);
+				free(s);
+			}
+		}
+		if(png) {
+			char *s = malloc(strlen(output_file)+5);
+			if(s) {
+				strcpy(s, output_file);
+				strcat(s, ".png");
+				pic_save_png(&pic, s);
 				free(s);
 			}
 		}

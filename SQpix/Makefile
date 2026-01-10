@@ -72,7 +72,7 @@ myclean:
 test: $(BIN) 
 	@for i in samples/*.{png,jpg,gif}; do\
 		x=`echo $$i | sed -e s/[\\.].*$$/.sqp/`; \
-		./$(BIN) -x -v -b --pgm "$$i" -o "$$x"; \
+		./$(BIN) -x -v -b --png "$$i" -o "$$x"; \
 	done
 
 %.CMD: %.ASM $(A09)
@@ -108,9 +108,9 @@ PIC=HNY2026
 FLEX_SYS=NEWFLEX.SYS
 ROM=SQ$(PIC).ROM
 
-hny: $(ROM)
+hny: $(ROM) forth.zip
 hny_clean:
-	-$(RM) $(ROM) samples/SQ$(PIC).SQP  forth.dir 
+	-$(RM) -rf $(ROM) samples/SQ$(PIC).SQP  forth.dir forth.zip
 
 %.zip:
 	@echo "Retreiving $@ from system-cfg..."
@@ -138,7 +138,7 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@$(RM) STARTUP.TXT
 
 samples/%.SQP: samples/%.jpg $(BIN)
-	./$(BIN) -b $< -o $@ --pgm
+	./$(BIN) -b $< -o $@ --png
 	
 hny_tst: hny
 	cd ../..; \
