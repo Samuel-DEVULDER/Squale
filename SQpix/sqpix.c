@@ -26,7 +26,177 @@
 #define FULL_INTENSITY	255
 #define HALF_INTENSITY	187
 
-PRIVATE uint8_t exo = 0, bayer = 0, verbose = 0, pgm = 0, png = 0;
+enum DITH_KIND {
+	THRESHOLD, CHECKS,
+	O2x2, O3x3, O4x4, O8x8,
+	H4x4a, H6x6a, H8x8a,
+	H4x4o, H6x6o, H8x8o,
+	C5x5b, C6x6b, C7x7b,
+	C5x5w, C6x6w, C7x7w,
+	VAC
+};
+
+PRIVATE uint8_t dith_vac[8][8] = {
+	{40,61, 2,39,19,43,23, 8},
+	{12,20,32,49,58,13,51,56},
+	{29,46,53, 9,27,33, 1,36},
+	{60, 5,24,42,17,62,45,18},
+	{41,15,63,37, 4,54,10,25},
+	{57, 7,30,50,21,28,38,52},
+	{22,35,44,11,59,47,14, 3},
+	{48,16,55,26, 6,34,64,31}
+};
+
+/* https://imagemagick.org/source/thresholds.xml */
+
+PRIVATE uint8_t dith_threshold[1][1] = {
+	{ 1},
+};
+
+PRIVATE uint8_t dith_checks[2][2] = {
+	{ 1, 2},
+	{ 2, 1},
+};
+
+PRIVATE uint8_t dith_o2[2][2] = {
+	{ 1, 3},
+	{ 4, 2},
+};
+
+PRIVATE uint8_t dith_o3[3][3] = {
+	{ 3, 7, 4},
+	{ 6, 1, 9},
+	{ 2, 8, 5}
+};
+
+PRIVATE uint8_t dith_o4[4][4] = {
+	{ 1, 9, 3,11},
+	{13, 5,15, 7},
+	{ 4,12, 2,10},
+	{16, 8,14, 6},
+};
+
+PRIVATE uint8_t dith_o8[8][8] = {
+	{ 1,33, 9,41, 3,35,11,43},
+	{49,17,57,25,51,19,59,27},
+	{13,45, 5,37,15,47, 7,39},
+	{61,29,53,21,63,31,55,23},
+	{ 4,36,12,44, 2,34,10,42},
+	{52,20,60,28,50,18,58,26},
+	{16,48, 8,40,14,46, 6,38},
+	{64,32,56,24,62,30,54,22}
+};
+
+PRIVATE uint8_t dith_h4a[4][4] = {
+	{ 4, 2, 7, 5},
+	{ 3, 1, 8, 6},
+	{ 7, 5, 4, 2},
+	{ 8, 6, 3, 1}
+};
+
+PRIVATE uint8_t dith_h6a[6][6] = {
+	{14,13,10, 8, 2, 3},
+	{16,18,12, 7, 1, 4},
+	{15,17,11, 9, 6, 5},
+	{ 8, 2, 3,14,13,10},
+	{ 7, 1, 4,16,18,12},
+	{ 9, 6, 5,15,17,11}
+};
+
+PRIVATE uint8_t dith_h8a[8][8] = {
+	{13, 7, 8,14,17,21,22,18},
+	{ 6, 1, 3, 9,28,31,29,23},
+	{ 5, 2, 4,10,27,32,30,24},
+	{16,12,11,15,20,26,25,19},
+	{17,21,22,18,13, 7, 8,14},
+	{28,31,29,23, 6, 1, 3, 9},
+	{27,32,30,24, 5, 2, 4,10},
+	{20,26,25,19,16,12,11,15}
+};
+
+PRIVATE uint8_t dith_h4o[4][4] = {
+	{ 7,13,11, 4},
+	{12,16,14, 8},
+	{10,15, 6, 2},
+	{ 5, 9, 3, 1}
+};
+
+PRIVATE uint8_t dith_h6o[6][6] = {
+	{ 7,17,27,14, 9, 4},
+	{21,29,33,31,18,11},
+	{24,32,36,34,25,22},
+	{19,30,35,28,20,10},
+	{ 8,15,26,16, 6, 2},
+	{ 5,13,23,12, 3, 1} 
+};
+
+PRIVATE uint8_t dith_h8o[8][8] = {
+	{ 7,21,33,43,36,19, 9, 4},
+	{16,27,51,55,49,29,14,11},
+	{31,47,57,61,59,45,35,23},
+	{41,53,60,64,62,52,40,38},
+	{37,44,58,63,56,46,30,22},
+	{15,28,48,54,50,26,17,10},
+	{ 8,18,34,42,32,20, 6, 2},
+	{ 5,13,25,39,24,12, 3, 1}
+};
+
+PRIVATE uint8_t dith_c5b[5][5] = {
+	{ 1,21,16,15, 4},
+	{ 5,17,20,19,14},
+	{ 6,21,25,24,12},
+	{ 7,18,22,23,11},
+	{ 2, 8, 9,10, 3}
+};
+
+PRIVATE uint8_t dith_c6b[6][6] = {
+	{ 1, 5,14,13,12, 4},
+	{ 6,22,28,27,21,11},
+	{15,29,35,34,26,20},
+	{16,30,36,33,25,19},
+	{ 7,23,31,32,24,10},
+	{ 2, 8,17,18, 9, 3}
+};
+
+PRIVATE uint8_t dith_c7b[7][7] = {
+	{ 3, 9,18,28,17, 8, 2},
+	{10,24,33,39,32,23, 7},
+	{19,34,44,48,43,31,16},
+	{25,40,45,49,47,38,27},
+	{20,35,41,46,42,29,15},
+	{11,21,36,37,28,22, 6},
+	{ 4,12,13,26,14, 5, 1}
+};
+
+PRIVATE uint8_t dith_c5w[5][5] = {
+	{25,21,10,11,22},
+	{20, 9, 6, 7,12},
+	{19, 5, 1, 2,13},
+	{18, 8, 4, 3,14},
+	{24,17,16,15,23}
+};
+
+PRIVATE uint8_t dith_c6w[6][6] = {
+	{36,32,23,24,25,33},
+	{31,15, 9,10,16,26},
+	{22, 8, 2, 3,11,17},
+	{21, 7, 1, 4,12,18},
+	{30,14, 6, 5,13,27},
+	{35,29,20,19,28,34}
+};
+
+PRIVATE uint8_t dith_c7w[7][7] = {
+	{47,41,32,22,33,44,48},
+	{40,26,17,11,18,27,43},
+	{31,16, 6, 2, 7,19,34},
+	{25,10, 5, 1, 3,12,23},
+	{30,15, 9, 4, 8,20,35},
+	{39,29,14,13,21,28,44},
+	{46,38,37,24,36,45,49}
+};
+
+PRIVATE uint8_t exo = 0, dith_kind = THRESHOLD;
+PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file;
 
 typedef float vec3[3];
@@ -316,28 +486,6 @@ PRIVATE void tetra_coord(tetra *tetra, vec3 *p, vec3 *b) {
 	}
 }
 
-uint8_t dith_vac[8][8] = {
-	{40,61,2,39,19,43,23,8},
-	{12,20,32,49,58,13,51,56},
-	{29,46,53,9,27,33,1,36},
-	{60,5,24,42,17,62,45,18},
-	{41,15,63,37,4,54,10,25},
-	{57,7,30,50,21,28,38,52},
-	{22,35,44,11,59,47,14,3},
-	{48,16,55,26,6,34,64,31}
-};
-
-uint8_t dith_bayer[8][8] = {
-	{ 1,33, 9,41, 3,35,11,43},
-	{49,17,57,25,51,19,59,27},
-	{13,45, 5,37,15,47, 7,39},
-	{61,29,53,21,63,31,55,23},
-	{ 4,36,12,44, 2,34,10,42},
-	{52,20,60,28,50,18,58,26},
-	{16,48, 8,40,14,46, 6,38},
-	{64,32,56,24,62,30,54,22}
-};
-
 PRIVATE uint32_t dith_key(vec3 *p) {
 	return  (uint32_t)(24*powf((*p)[0]<=0 ? 0 : (*p)[0], 0.45f)) +
 		(uint32_t)(24*powf((*p)[1]<=0 ? 0 : (*p)[1], 0.45f))*32 +
@@ -397,13 +545,13 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 
 #define length_of(array) (sizeof(array)/sizeof(array[0]))
 
-PRIVATE uint8_t dith(const uint8_t *dith, const int mx, const int my,  
+PRIVATE uint8_t dith(const uint8_t *dith, 
+		     const int mx, const int my, const int mz,
 		     const int x, const int y, vec3 *p) {
 	const uint32_t key = dith_key(p);
 	struct dith_cache *cache = hmgetp_null(dith_cache, key);
 	
-	const int mxy = mx*my;
-	assert(mxy <= length_of(cache->value));
+	assert(mz <= length_of(cache->value));
 
 	if(cache == NULL) {
 		tetra *t = dith_find_tetra(p);
@@ -422,18 +570,18 @@ PRIVATE uint8_t dith(const uint8_t *dith, const int mx, const int my,
 		
 		do {
 			int i = 0; float m = 0;			
-			m += sel[0]->weight * mxy; while(i<m) tab[i++] = sel[0];
-			m += sel[1]->weight * mxy; while(i<m) tab[i++] = sel[1];
-			m += sel[2]->weight * mxy; while(i<m) tab[i++] = sel[2];
-			while(i<mxy) tab[i++] = sel[3];
+			m += sel[0]->weight * mz; while(i<m) tab[i++] = sel[0];
+			m += sel[1]->weight * mz; while(i<m) tab[i++] = sel[1];
+			m += sel[2]->weight * mz; while(i<m) tab[i++] = sel[2];
+			while(i<mz) tab[i++] = sel[3];
 		} while(0);
 		
-		qsort(tab, mxy, sizeof(tab[0]), color_cmp_by_intens);
+		qsort(tab, mz, sizeof(tab[0]), color_cmp_by_intens);
 		
 		do {
 			struct dith_cache new_entry; int i;
 			new_entry.key = key;
-			for(i=0; i<mxy; ++i) new_entry.value[i] = tab[i]->index;
+			for(i=0; i<mz; ++i) new_entry.value[i] = tab[i]->index;
 			hmputs(dith_cache, new_entry);
 		} while(0);
 		
@@ -717,16 +865,41 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 }
 
 PRIVATE void pic_dither(pic *pic, int x, int y) {
+	uint8_t *dt;
+	int dx,dy,dm;
 	vec3 p; 
 
 	x &= 255; y &= 255;
 
-	int8_t c = dith(
-	        bayer ? &dith_bayer[0][0]        : &dith_vac[0][0], 
-		bayer ? length_of(dith_bayer)    : length_of(dith_vac),
-		bayer ? length_of(dith_bayer[0]) : length_of(dith_vac[0]),
-		x, y, squale_color(pic, x, y, &p)
-	);
+#define dmdtdxdy(mx, m)	dt = &m[0][0]; \
+			dy = length_of(m); \
+			dx = length_of(m[0]); \
+			dm = mx
+	switch(dith_kind) {
+	case VAC:	dmdtdxdy(64, dith_vac); 	break;
+	case CHECKS:	dmdtdxdy( 2, dith_checks); 	break;
+	case O2x2:	dmdtdxdy( 4, dith_o2); 		break;
+	case O3x3:	dmdtdxdy( 9, dith_o3); 		break;
+	case O4x4:	dmdtdxdy(16, dith_o4); 		break;
+	case O8x8:	dmdtdxdy(64, dith_o8); 		break;
+	case H4x4a:	dmdtdxdy( 8, dith_h4a);		break;
+	case H6x6a:	dmdtdxdy(18, dith_h6a);		break;
+	case H8x8a:	dmdtdxdy(32, dith_h8a);		break;
+	case H4x4o:	dmdtdxdy(16, dith_h4o);		break;
+	case H6x6o:	dmdtdxdy(36, dith_h6o);		break;
+	case H8x8o:	dmdtdxdy(64, dith_h8o);		break;
+	case C5x5b:	dmdtdxdy(25, dith_c5b);		break;
+	case C6x6b:	dmdtdxdy(36, dith_c6b);		break;
+	case C7x7b:	dmdtdxdy(49, dith_c7b);		break;
+	case C5x5w:	dmdtdxdy(25, dith_c5w);		break;
+	case C6x6w:	dmdtdxdy(36, dith_c6w);		break;
+	case C7x7w:	dmdtdxdy(49, dith_c7w);		break;
+	default: 	dmdtdxdy( 1, dith_threshold);	break;
+	}
+#undef dmdtdxdy
+
+	int8_t c = dith(dt, dx, dy, dm, x, y, 
+			squale_color(pic, x, y, &p));
 	
 	pic->bitmap[x + y*256] = c;
 }
@@ -796,14 +969,32 @@ PRIVATE void init(void) {
 }
 
 PRIVATE void usage(char *av0) {
-	printf("Usage: %s [options] <inputimage.ext> -o <outputfile.ext>\n", av0);
+	printf("Usage: %s [options] <inputimage.ext>\n", av0);
 	printf("options:\n");
-	printf(" -h    : prints this help\n");
-	printf(" -v    : verbose\n");
-	printf(" -x    : compresses with exomizer\n");
-	printf(" -b    : bayer dithering\n");
-	printf(" --pgm : output pgm image (for preview)\n");
-	printf(" --png : output png image (for preview)\n");
+	printf(" -h        : Prints this help\n");
+	printf(" -v        : Verbose\n");
+	printf(" -o <name> : Specify output file\n");
+	printf(" --exo -z  : Compresses with exomizer\n");
+	printf(" --png     : Output png image (for preview)\n");
+	printf(" --pgm     : Output pgm image (for preview)\n");
+	printf(" --vac     : Void and cluster (dither)\n");
+	printf(" --checks  : Checkerboard 2x1 (dither)\n");
+	printf(" --o2x2    : Ordered 2x2 (dispersed)\n");
+	printf(" --o3x3    : Ordered 3x3 (dispersed)\n");
+	printf(" --o4x4 -x : Ordered 4x4 (dispersed)\n");
+	printf(" --o8x8    : Ordered 8x8 (dispersed)\n");
+	printf(" --h4x4a   : Halftone 4x4 (angled)\n");
+	printf(" --h6x6a   : Halftone 6x6 (angled)\n");
+	printf(" --h8x8a   : Halftone 8x8 (angled)\n");
+	printf(" --h4x4o   : Halftone 4x4 (orthogonal)\n");
+	printf(" --h6x6o   : Halftone 6x6 (orthogonal)\n");
+	printf(" --h8x8o   : Halftone 8x8 (orthogonal)\n");
+	printf(" --c5x5b   : Circles 5x5 (black)\n");
+	printf(" --c6x6b   : Circles 6x6 (black)\n");
+	printf(" --c7x7b   : Circles 7x7 (black)\n");
+	printf(" --c5x5w   : Circles 5x5 (white)\n");
+	printf(" --c6x6w   : Circles 6x6 (white)\n");
+	printf(" --c7x7w   : Circles 7x7 (white)\n");
 	exit(0);
 }
 
@@ -814,19 +1005,58 @@ PRIVATE void parse(int ac, char **av) {
 		|| !strcmp("-h", av[i])
 		|| !strcmp("--help", av[i])
 		|| 0) usage(av[0]);
+
 		else if(!strcmp("-v", av[i])) 
 			verbose = 1;
-		else if(!strcmp("-x", av[i])) 
+		else if(!strcmp("--exo", av[i])
+                     || !strcmp("-z",   av[i]))
 			exo = 1;
-		else if(!strcmp("-b", av[i])) 
-			bayer = 1;
 		else if(!strcmp("--pgm", av[i])) 
 			pgm = 1;
 		else if(!strcmp("--png", av[i])) 
 			png = 1;
+
+		else if(!strcmp("--vac", av[i])) 
+			dith_kind = VAC;
+		else if(!strcmp("--checks", av[i])) 
+			dith_kind = CHECKS;
+		else if(!strcmp("--o2x2", av[i])) 
+			dith_kind = O2x2;
+		else if(!strcmp("--o3x3", av[i])) 
+			dith_kind = O3x3;
+		else if(!strcmp("--o4x4", av[i])
+		     || !strcmp("-x",     av[i])) 
+			dith_kind = O4x4;
+		else if(!strcmp("--o8x8", av[i])) 
+			dith_kind = O8x8;
+		else if(!strcmp("--h4x4a", av[i])) 
+			dith_kind = H4x4a;
+		else if(!strcmp("--h6x6a", av[i])) 
+			dith_kind = H6x6a;
+		else if(!strcmp("--h8x8a", av[i])) 
+			dith_kind = H8x8a;
+		else if(!strcmp("--h4x4o", av[i])) 
+			dith_kind = H4x4o;
+		else if(!strcmp("--h6x6o", av[i])) 
+			dith_kind = H6x6o;
+		else if(!strcmp("--h8x8o", av[i])) 
+			dith_kind = H8x8o;
+		else if(!strcmp("--c5x5b", av[i])) 
+			dith_kind = C5x5b;
+		else if(!strcmp("--c6x6b", av[i])) 
+			dith_kind = C6x6b;
+		else if(!strcmp("--c7x7b", av[i])) 
+			dith_kind = C7x7b;
+		else if(!strcmp("--c5x5w", av[i])) 
+			dith_kind = C5x5w;
+		else if(!strcmp("--c6x6w", av[i])) 
+			dith_kind = C6x6w;
+		else if(!strcmp("--c7x7w", av[i])) 
+			dith_kind = C7x7w;
+
 		else if(!strcmp("-o", av[i]) && i<ac-1)
 			output_file = av[++i];
-		else if(input_file==NULL)
+		else if(input_file == NULL)
 			input_file = av[i];
 		else {
 			fprintf(stderr, "Unknown argument: %s\n" , av[i]);
@@ -838,11 +1068,6 @@ PRIVATE void parse(int ac, char **av) {
 		fprintf(stderr, "Missing input file\n");
 		exit(-1);
 	}
-
-	if(output_file == NULL) {
-		fprintf(stderr, "Missing output file\n");
-		exit(-1);
-	}
 }
 
 int main(int ac, char **av) {
@@ -851,30 +1076,47 @@ int main(int ac, char **av) {
 	init();
 	do {
 		pic pic;
+		char *out;
 		
 		pic_load(&pic, input_file);
 		pic_conv_h(NULL);
 		pic_conv_h(&pic);
-		pic_save(&pic, output_file);
+		out = output_file;
+
+		if(out==NULL) {
+			char *s;
+			out = malloc(strlen(input_file)+5);
+			if(out==NULL) {
+				perror("Out of memory");
+				exit(-1);
+			}
+			strcpy(out, input_file);
+			s = strrchr(out, '.');
+			if(s) *s = 0;
+			strcat(s, ".SQP");
+		}
+
+		pic_save(&pic, out);
 		if(pgm) {
-			char *s = malloc(strlen(output_file)+5);
+			char *s = malloc(strlen(out)+5);
 			if(s) {
-				strcpy(s, output_file);
+				strcpy(s, out);
 				strcat(s, ".pgm");
 				pic_save_pgm(&pic, s);
 				free(s);
 			}
 		}
 		if(png) {
-			char *s = malloc(strlen(output_file)+5);
+			char *s = malloc(strlen(out)+5);
 			if(s) {
-				strcpy(s, output_file);
+				strcpy(s, out);
 				strcat(s, ".png");
 				pic_save_png(&pic, s);
 				free(s);
 			}
 		}
 		pic_done(&pic);
+		if(out != output_file) free(out);
 	} while(0);
 	
 	return 0;

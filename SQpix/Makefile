@@ -40,6 +40,7 @@ FLEXFLOPPY=../flextools/flexfloppy/flexfloppy$(EXE)
 A09=a09/a09$(EXE)
 BIN=sqpix$(EXE)
 CMD=SQPSHOW.CMD
+DITH=-x
 
 ALL=$(BIN) $(CMD)
 
@@ -72,7 +73,7 @@ myclean:
 test: $(BIN) 
 	@for i in samples/*.{png,jpg,gif}; do\
 		x=`echo $$i | sed -e s/[\\.].*$$/.sqp/`; \
-		./$(BIN) -x -v -b --png "$$i" -o "$$x"; \
+		./$(BIN) -z -v $(DITH) --png "$$i" -o "$$x"; \
 	done
 
 %.CMD: %.ASM $(A09)
@@ -138,7 +139,7 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@$(RM) STARTUP.TXT
 
 samples/%.SQP: samples/%.jpg $(BIN)
-	./$(BIN) -b $< -o $@ --png
+	./$(BIN) $(DITH) $< -o $@ --png
 	
 hny_tst: hny
 	cd ../..; \
