@@ -2,6 +2,12 @@
 # Makefile for SQPIX by Samuel Devulder
 ##############################################################################
 
+CMD=SQPSHOW.CMD
+DITH=-x 
+#  --vac -o8x8 --c5x5b --o3x3
+
+
+
 STRIP=strip
 WGET=wget --no-check-certificate
 SED=sed -e
@@ -39,8 +45,6 @@ endif
 FLEXFLOPPY=../flextools/flexfloppy/flexfloppy$(EXE)
 A09=a09/a09$(EXE)
 BIN=sqpix$(EXE)
-CMD=SQPSHOW.CMD
-DITH=-x
 
 ALL=$(BIN) $(CMD)
 
@@ -71,6 +75,7 @@ myclean:
 	-@cd $(EXO2) && $(MAKE) -f Makefile clean >/dev/null 2>&1 
 
 test: $(BIN) 
+	-@rm samples/*.sqp.png 2>/dev/null
 	@for i in samples/*.{png,jpg,gif}; do\
 		x=`echo $$i | sed -e s/[\\.].*$$/.sqp/`; \
 		./$(BIN) -z -v $(DITH) --png "$$i" -o "$$x"; \
@@ -141,6 +146,9 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 samples/%.SQP: samples/%.jpg $(BIN) Makefile
 	./$(BIN) $(DITH) $< -o $@ --png -z -v
 	
-hny_tst: hny
-	cd ../..; \
-	./mame squale -window -debug -cart "$(shell cygpath -w -s $(PWD)/$(ROM))" &
+hny_dbg: hny_tst,-debug
+
+hny_tst: hny_tst,-skip_gameinfo
+
+hny_tst,%: hny
+	cd ../.. && ./mame squale $* -window -cart "$(shell cygpath -w -s $(PWD)/$(ROM))" &

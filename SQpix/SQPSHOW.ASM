@@ -226,7 +226,8 @@ EXOTAB  FCB     4,2,4,16,48,32
 EXOCOFF BSR     EXOCOOK
         PSHS    D
         LEAX    <EXOTAB,PCR
-        CMPD    #3
+*        CMPD    #3
+        CMPB    #3
         BHS     EXOSCOF
         ABX
 EXOSCOF LDB     ,X
@@ -263,7 +264,7 @@ EXORBL  BSR     EXOBIT
 
 PSET    PSHS    X
         LEAX    <COORD,PCR
-PSETF   SWI     
+        SWI     
         FCB     $24     ; set  color
         TFR     Y,D
         STA     3,X
