@@ -38,12 +38,10 @@ START   LBSR    CLRFCB
 
 * cas spécial pour les fichiers TXT      
         BSR     CHKTXT
-        BEQ     SHOWTXT
+        LBEQ    SHOWTXT
         
 * Ouvre le fichier en lecture
-        LBSR    OPEN
-        LBEQ    SHOWSQP
-        LBRA	DOS_ERR
+        LBRA    SHOWSQP
 
 CHKEXT  LDA     12,X
         BNE     CHKEXT1
@@ -59,40 +57,15 @@ CHKTXT  LDD     #'T*256+'X
         CMPA    14,X
 CHKTXT1 RTS   
 
-SHOWTXT LBSR    OPEN
-        LBNE    DOS_ERR
-        JSR     PCRLF
-        LDA     #'U-64
-SHWTXT1 CMPA    #10
-        BNE     SHWTXT2
-        BSR     PUTC
-        LDA     #13
-SHWTXT2 BSR     PUTC
-        BSR     READ
-        BNE     SHWTXT1
-        JSR     PCRLF
-        BRA     EXIT
-        
 WAIT    BSR     BEEP
 WAIT1   BSR     GETC
         TSTA
         BEQ     WAIT1
         RTS
 
-CURSON  LDA     #'T-64
-        FCB     $8C
-CURSOFF LDA     #'U-64
-        FCB     $8C
-CLS     LDA     #12
-        FCB     $8C
-BEEP    LDA     #7
-PUTC    JMP     $F10F   ; fast monitor
-GETC    JMP     $F106   ; fast monitor
-KTST    JMP     $F10C   ; fast monitor
-
 PSET2   LEAY    -2,Y
         PSHS    CC,D,X
-        LEAX    <COORD,PCR
+        LEAX    COORD,PCR
 
         LSRA
         LSRA
@@ -117,71 +90,83 @@ PSET2   LEAY    -2,Y
         FCB     $2A
         PULS    CC,D,X,PC
 
-* 2 pixels par octets
-SQP1    BSR     READ
-        BSR     PSET2
-        BNE     SQP1
+CURSON  LDA     #'T-64
+        FCB     $8C
+CURSOFF LDA     #'U-64
+        FCB     $8C
+CLS     LDA     #12
+        FCB     $8C
+BEEP    LDA     #7
+PUTC    JMP     $F10F   ; fast monitor
+GETC    JMP     $F106   ; fast monitor
+KTST    JMP     $F10C   ; fast monitor
 
-        BSR     WAIT
-        BSR     CLS        
-EXIT    BSR     CLOSE
-        BSR     CURSON
-        JMP     WARMS
-
-* EXOMIZER compression
-SQP2
-
-SHOWSQP BSR     READ
-        CMPA    #'S
-        BNE     BADSQP
-        BSR     READ
-        CMPA    #'Q
-        BNE     BADSQP
-        BSR     READ
-        CMPA    #'P
-        BNE     BADSQP
-        LDY     #0
+SHOWSQP BSR     OPEN
+        LBNE    DOS_ERR
+        BSR     CHKBYT
+        FCB     'S
+        BSR     CHKBYT
+        FCB     'Q
+        BSR     CHKBYT
+        FCB     'P
         BSR     CURSOFF
         BSR     READ
         DECA    
         BEQ     SQP1
         DECA
-        BEQ     SQP2
-BADSQP  BRA     BAD_SQP        
+        LBEQ    SQP2
+        LBRA    BAD_SQP
 
-* Lit un octet
-READ    PSHS    X
-        LDX     #0
-        BSR     CALLFMS
-        BEQ     READ_DONE
-        LDA     1,X
-        SUBA    #8
-        BNE     READ_ERR
-READ_DONE
+CHKBYT  PULS    X
+        BSR     READ
+        CMPA    ,X+
+        LBNE    BAD_SQP
+        JMP     ,X
+        
+* 2 pixels par octets
+SQP1    LDY     #0
+SQP1LP  BSR     READ
+        BSR     PSET2
+        BNE     SQP1LP
+
+DONE    BSR     WAIT
+        BSR     CLS        
+EXIT    BSR     CLOSE
+        BSR     CURSON
+        JMP     WARMS
+
+SHOWTXT BSR     OPEN
+        LBNE    DOS_ERR
+        JSR     PCRLF
+        LDA     #'U-64
+SHWTXT1 CMPA    #10
+        BNE     SHWTXT2
+        BSR     PUTC
+        LDA     #13
+SHWTXT2 BSR     PUTC
+        BSR     READ
         TSTA
-        PULS    X,PC
-READ_ERR
-        LEAS    4,S
-        BRA     DOS_ERR
-
-PSET    PSHS    D,X
-        SWI     
-        FCB     $24
-        LEAX    <COORD,PCR
-        TFR     Y,D
-        STA     3,X
-        STB     1,X
-        SWI
-        FCB     $2A
-        PULS    D,X,PC
-COORD   FDB     0,0     
-        FDB     0,0
+        BNE     SHWTXT1
+        JSR     PCRLF
+        BRA     EXIT
 
 * ouvre le  fichier
 CLOSE   LDX     #0
 	LDA	#4      ; CLOSE
         STA	,X
 CALLFMS JMP     FMS
+
+* Lit un octet
+READ    PSHS    X
+        LDX     #0
+        BSR     CALLFMS
+        BEQ     READEND
+        LDA     1,X
+        SUBA    #8
+        BNE     READERR
+READEND PULS    X,PC
+READERR LEAS    4,S
+        LBRA    DOS_ERR
 
 * ouvre le  fichier
 OPEN    LDD	#511    ; OPEN for READ
@@ -195,7 +180,132 @@ OPEN    LDD	#511    ; OPEN for READ
         STB     ,X      ; sets Z=1
 OPENEND RTS
 
-CLRFCB  LEAX    <SQPFCB,PCR
+EXOCOOK LDX     #0
+        ABX
+        ASLB
+        ABX
+        LDB     ,X
+        BSR     EXOBITS
+        ADDD    1,X
+        RTS
+
+EXOBIT  LDB     #1
+EXOBITS PSHS    U               ; U=0
+EXOBUF  LDA     #1
+        BRA     EXOBIT4
+EXOBIT2 LSRA
+        BNE     EXOBIT3
+        BSR     READ
+        LSRA
+        ORA     #128
+EXOBIT3 ROL     1,S
+        ROL     ,S
+EXOBIT4 DECB
+        BPL     EXOBIT2
+        STA     <EXOBUF+1,PCR
+        PULS    D,PC
+
+EXOIDX  LDB     #0
+        CMPB    #16
+        BNE     EXOIDX1
+        LBRA    DONE
+EXOIDX1 BLO     EXOCOFF
+        DECB
+        BSR     EXOBITS
+
+EXOCPY  TFR     D,X
+EXOCPY1 BSR     READ
+        LEAY    -1,Y
+        BSR     PSET
+        LEAX    -1,X
+        BNE     EXOCPY1
+        BRA     EXOLOOP
+
+EXOTAB  FCB     4,2,4,16,48,32
+
+EXOCOFF BSR     EXOCOOK
+        PSHS    D
+        LEAX    <EXOTAB,PCR
+        CMPD    #3
+        BHS     EXOSCOF
+        ABX
+EXOSCOF LDB     ,X
+        BSR     EXOBITS
+        ADDB    3,X
+        BSR     EXOCOOK
+        STD     <EXOOFFS+1,PCR
+        PULS    X
+
+EXOCPY2 LEAY    -1,Y
+        PSHS    X
+        LEAX    <COORD,PCR
+        TFR     Y,D
+EXOOFFS ADDD    #0      ; auto modifiable
+        STA     3,X
+        STB     1,X
+        SWI
+        FCB     $2F     ; get color
+        PULS    X
+        BSR     PSET    ; inline ?
+        LEAX    -1,X
+        BNE     EXOCPY2
+*        BRA     EXOLOOP
+
+EXOLOOP BSR     EXOBIT
+        STB     <EXOIDX+1,PCR
+        BNE     EXOCPY
+     
+EXORBL  BSR     EXOBIT
+        TSTB    
+        BNE     EXOIDX
+        INC     <EXOIDX+1,PCR
+        BRA     EXORBL
+
+PSET    PSHS    X
+        LEAX    <COORD,PCR
+PSETF   SWI     
+        FCB     $24     ; set  color
+        TFR     Y,D
+        STA     3,X
+        STB     1,X
+        SWI
+        FCB     $2A     ; draw point
+        PULS    X,PC
+
+* EXOMIZER decompression
+SQP2    LBSR    READ
+        STA     EXOBUF+1,PCR        
+        LEAY    <EXOBIBA,PCR
+        STY     EXOCOOK+1,PCR
+        LDU     #0
+        CLRB
+EXONXT  CLRA
+        PSHS    D
+        BITB    #15
+        BNE     EXOSKP
+        LDX     #1
+EXOSKP  LDB     #4
+        LBSR    EXOBITS
+        STB     ,Y+
+        COMB
+EXOROLL ROL     ,S
+        ROLA
+        INCB
+        BMI     EXOROLL
+        LDB     ,S
+        STX     ,Y++
+        LEAX    D,X
+        PULS    D
+        INCB
+        CMPB    #52
+        BNE     EXONXT
+        LEAY    ,U                      
+        BRA     EXOLOOP
+
+COORD   FDB     0,0     
+        FDB     0,0
+
+CLRFCB  LEAX    SQPFCB,PCR
         LDD     #31
 LOOP    SET     *
         STA     B,X
@@ -207,15 +317,17 @@ LOOP    SET     *
 DOS_ERR JSR     RPTERR
         LBSR    BEEP
         LBRA    EXIT
-        
+              
 BAD_SQP	LEAX	<BAD_SQP_MSG,PCR
-PUTS    JMP     PSTRING
+        JMP     PSTRING
 	LBRA    EXIT
 BAD_SQP_MSG
         FCC     "BAD SPQ FILE"
         FCB     4
 
+                
 ; ———— Variables Locales ————
+EXOBIBA RMB     156
 SQPFCB  RMB     320     ; FCB fichier
 
         END     START

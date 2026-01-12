@@ -717,12 +717,12 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 
 		membuf_init(inbuf);
 		do {
-			i -= 1;
+			--i;
 			membuf_append(inbuf, &pic->bitmap[i^0xFF00], 1);
 		} while(i);
 
 		membuf_init(outbuf);
-	        crunch_backwards(inbuf, outbuf, options, info);		
+	        crunch(inbuf, outbuf, options, info);		
 		fwrite(membuf_get(outbuf), 1, membuf_memlen(outbuf), f);
 		membuf_free(outbuf);
 		
@@ -901,7 +901,7 @@ PRIVATE void pic_dither(pic *pic, int x, int y) {
 	int8_t c = dith(dt, dx, dy, dm, x, y, 
 			squale_color(pic, x, y, &p));
 	
-	pic->bitmap[x + y*256] = c;
+	pic->bitmap[x + y*256] = c; //*0+(((x/30)+(y/30))%14);
 }
 
 PRIVATE void pic_conv_h(pic *pic) {

@@ -138,8 +138,8 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@$(FLEXFLOPPY) --in  "$@" --cat
 	@$(RM) STARTUP.TXT
 
-samples/%.SQP: samples/%.jpg $(BIN)
-	./$(BIN) $(DITH) $< -o $@ --png
+samples/%.SQP: samples/%.jpg $(BIN) Makefile
+	./$(BIN) $(DITH) $< -o $@ --png -z -v
 	
 hny_tst: hny
 	cd ../..; \
