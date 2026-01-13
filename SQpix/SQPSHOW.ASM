@@ -27,7 +27,9 @@ COUTCH  EQU	$D3F9
 FMSCLS  EQU	$D403
 FMS	EQU	$D406
 
-START   LBSR    CLRFCB
+ZZZ     EQU     0
+
+START   LBSR    INIT
 	
 * parse filename
         JSR     GETFIL
@@ -41,7 +43,7 @@ START   LBSR    CLRFCB
         LBEQ    SHOWTXT
         
 * Ouvre le fichier en lecture
-        LBRA    SHOWSQP
+        BRA    SHOWSQP
 
 CHKEXT  LDA     12,X
         BNE     CHKEXT1
@@ -63,33 +65,6 @@ WAIT1   BSR     GETC
         BEQ     WAIT1
         RTS
 
-PSET2   LEAY    -2,Y
-        PSHS    CC,D,X
-        LEAX    COORD,PCR
-
-        LSRA
-        LSRA
-        LSRA
-        LSRA
-        SWI     
-        FCB     $24
-
-        TFR     Y,D
-        STA     3,X
-        STB     1,X
-        SWI
-        FCB     $2A
-
-        LDA     1,S
-        ANDA    #15
-        SWI     
-        FCB     $24
-
-        INC     1,X
-        SWI
-        FCB     $2A
-        PULS    CC,D,X,PC
-
 CURSON  LDA     #'T-64
         FCB     $8C
 CURSOFF LDA     #'U-64
@@ -101,7 +76,13 @@ PUTC    JMP     $F10F   ; fast monitor
 GETC    JMP     $F106   ; fast monitor
 KTST    JMP     $F10C   ; fast monitor
 
-SHOWSQP BSR     OPEN
+CHKBYT  PULS    X
+        BSR     READ
+        CMPA    ,X+
+        LBNE    BAD_SQP
+        JMP     ,X
+
+SHOWSQP LBSR    OPEN
         LBNE    DOS_ERR
         BSR     CHKBYT
         FCB     'S
@@ -116,18 +97,6 @@ SHOWSQP BSR     OPEN
         DECA
         LBEQ    SQP2
         LBRA    BAD_SQP
-
-CHKBYT  PULS    X
-        BSR     READ
-        CMPA    ,X+
-        LBNE    BAD_SQP
-        JMP     ,X
-        
-* 2 pixels par octets
-SQP1    LDY     #0
-SQP1LP  BSR     READ
-        BSR     PSET2
-        BNE     SQP1LP
 
 DONE    BSR     WAIT
         BSR     CLS        
@@ -151,14 +120,14 @@ SHWTXT2 BSR     PUTC
         BRA     EXIT
 
 * ouvre le  fichier
-CLOSE   LDX     #0
+CLOSE   LDX     #ZZZ
 	LDA	#4      ; CLOSE
         STA	,X
 CALLFMS JMP     FMS
 
 * Lit un octet
 READ    PSHS    X
-        LDX     #0
+        LDX     #ZZZ
         BSR     CALLFMS
         BEQ     READEND
         LDA     1,X
@@ -180,7 +149,23 @@ OPEN    LDD	#511    ; OPEN for READ
         STB     ,X      ; sets Z=1
 OPENEND RTS
 
-EXOCOOK LDX     #0
+PSET2   LEAY    -1,Y
+        LBRA    PSET
+
+* 2 pixels par octets
+SQP1    LDY     #0
+SQP1LP  BSR     READ
+        BSR     PSET2
+        LSRA
+        LSRA
+        LSRA
+        LSRA
+        BSR     PSET2
+        LEAY    ,Y
+        BNE     SQP1LP
+        BRA     DONE
+        
+EXOCOOK LDX     #ZZZ
         ABX
         ASLB
         ABX
@@ -205,7 +190,7 @@ EXOBIT4 DECB
         STA     <EXOBUF+1,PCR
         PULS    D,PC
 
-EXOIDX  LDB     #0
+EXOIDX  LDB     #ZZZ/256
         CMPB    #16
         BNE     EXOIDX1
         LBRA    DONE
@@ -215,8 +200,7 @@ EXOIDX1 BLO     EXOCOFF
 
 EXOCPY  TFR     D,X
 EXOCPY1 BSR     READ
-        LEAY    -1,Y
-        BSR     PSET
+        BSR     PSET2
         LEAX    -1,X
         BNE     EXOCPY1
         BRA     EXOLOOP
@@ -238,15 +222,9 @@ EXOSCOF LDB     ,X
         PULS    X
 
 EXOCPY2 LEAY    -1,Y
-        PSHS    X
-        LEAX    <COORD,PCR
         TFR     Y,D
-EXOOFFS ADDD    #0      ; auto modifiable
-        STA     3,X
-        STB     1,X
-        SWI
-        FCB     $2F     ; get color
-        PULS    X
+EXOOFFS ADDD    #ZZZ    ; auto modifiable
+        BSR     PGET
         BSR     PSET    ; inline ?
         LEAX    -1,X
         BNE     EXOCPY2
@@ -262,21 +240,10 @@ EXORBL  BSR     EXOBIT
         INC     <EXOIDX+1,PCR
         BRA     EXORBL
 
-PSET    PSHS    X
-        LEAX    <COORD,PCR
-        SWI     
-        FCB     $24     ; set  color
-        TFR     Y,D
-        STA     3,X
-        STB     1,X
-        SWI
-        FCB     $2A     ; draw point
-        PULS    X,PC
-
 * EXOMIZER decompression
 SQP2    LBSR    READ
         STA     EXOBUF+1,PCR        
-        LEAY    <EXOBIBA,PCR
+        LEAY    EXOBIBA,PCR
         STY     EXOCOOK+1,PCR
         LDU     #0
         CLRB
@@ -303,15 +270,43 @@ EXOROLL ROL     ,S
         LEAY    ,U                      
         BRA     EXOLOOP
 
-COORD   FDB     0,0     
-        FDB     0,0
+PSET    PSHS    D,X
+        ANDA    #15
+PSET1   LDX     #ZZZ
+        LEAX    -4,X
+        SWI     
+        FCB     $24     ; set  color
+        TFR     Y,D
+        STA     3,X
+        STB     1,X
+        SWI
+        FCB     $2A     ; draw point        
+        PULS    D,X,PC
 
-CLRFCB  LEAX    SQPFCB,PCR
-        LDD     #31
+PGET    PSHS    B,X
+PGET1   LDX     #ZZZ
+        LEAX    -4,X
+        STB     1,X
+        STA     3,X
+        SWI
+        FCB     $2F     ; get color
+        PULS    B,X,PC
+
+INIT    LEAX    PXCACHE,PCR
+        STX     <PSET1+1,PCR
+        STX     <PGET1+1,PCR
+        CLRA
+        CLRB
+        STD     -4,X
+        STD     -2,X
+
+        LEAX    SQPFCB,PCR
+        LDB     #31
 LOOP    SET     *
         STA     B,X
         DECB
         BPL     LOOP
+        
         RTS
 
 ; ———— Gestion des Erreurs ————
@@ -325,10 +320,14 @@ BAD_SQP	LEAX	<BAD_SQP_MSG,PCR
 BAD_SQP_MSG
         FCC     "BAD SPQ FILE"
         FCB     4
-
                 
 ; ———— Variables Locales ————
 EXOBIBA RMB     156
+COORD   FDB     0,0     
+        FDB     0,0
+PXCACHE RMB     256
 SQPFCB  RMB     320     ; FCB fichier
+
+ENDATA  set     *
 
         END     START
