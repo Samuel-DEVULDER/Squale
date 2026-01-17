@@ -199,6 +199,9 @@ PRIVATE uint8_t exo = 0, dith_kind = THRESHOLD;
 PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file;
 
+PRIVATE uint8_t centered = 1, hq_zoom = 0;
+PRIVATE float aspect_ratio = 4.0f/3.0f;
+
 typedef float vec3[3];
 
 PRIVATE vec3 *vec3_set(vec3 *t, float x, float y, float z) {
@@ -641,6 +644,20 @@ PRIVATE const char *basename(const char *s) {
 	return t;
 }
 
+PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
+	const int w = pic->w, h = pic->h;
+	float fx, fy;
+	if(w<=h*aspect_ratio) {
+		fx = (x*h*aspect_ratio)/256  + (centered ? 0.5f*(w - h*aspect_ratio) : 0);
+		fy = (y*h)/256;
+	} else {
+		fx = (x*w)/(256);
+		fy = (y*w/aspect_ratio)/(256) + (centered ? 0.5f*(h - w/aspect_ratio) : 0);
+	}
+	*rx = nearbyintf(fx);
+	*ry = nearbyintf(fy);
+}
+
 PRIVATE void pic_load(pic *pic, const char *filename) {
 	int n;
 	
@@ -666,30 +683,22 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 	}
 	
 #ifdef STBIR_INCLUDE_STB_IMAGE_RESIZE2_H
-	if(pic->w > pic->h) {
-		int w = 256, h = (pic->h*w*2+1)/(2*pic->w);
-		uint8_t *buf = stbir_resize_uint8_srgb(
-			pic->sRGB, pic->w, pic->h,0,
-			NULL,w,h,0, STBIR_RGB);
-		if(buf) {
-			free(pic->sRGB);
-			pic->sRGB = buf;
-			pic->w = w;
-			pic->h = h;
+	if(hq_zoom) {
+		int w, h;
+		squale_coord(pic, 256, 256, &w, &h);
+		
+		if(w!=pic->w || h!=pic->h) {
+			uint8_t *buf = stbir_resize_uint8_srgb(
+				pic->sRGB, pic->w, pic->h,0,
+				NULL,w,h,0, STBIR_RGB);
+			if(buf) {
+				free(pic->sRGB);
+				pic->sRGB = buf;
+				pic->w = w;
+				pic->h = h;
+			} 
 		}
-	} else if(pic->h > pic->w 
-	       || pic->h != 256) {
-		int h = 256, w = (pic->w*h*2+1)/(2*pic->h);
-		uint8_t *buf = stbir_resize_uint8_srgb(
-			pic->sRGB, pic->w, pic->h,0,
-			NULL,w,h,0, STBIR_RGB);
-		if(buf) {
-			free(pic->sRGB);
-			pic->sRGB = buf;
-			pic->w = w;
-			pic->h = h;
-		}
-	} 
+	}
 #endif
 }
 
@@ -825,17 +834,6 @@ PRIVATE vec3 *pic_get_linear_color(pic *pic, int x, int y, vec3 *ret) {
 	// vec3_set(ret, 0.20792611981001, 0.02084547344562, 0.022794021361973);
 	
 	return ret;
-}
-
-PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
-	const int w = pic->w, h = pic->h;
-	if(w<=h) {
-		*rx = (x*h + 128*(w - h))/256;
-		*ry = (y*h)/256;
-	} else {
-		*rx = (x*w)/256;
-		*ry = (y*w + 128*(h - w))/256;
-	}
 }
 
 PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
