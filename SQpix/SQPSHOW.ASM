@@ -1,7 +1,7 @@
-; SQPSHOW.CMD - AZffiche une image
+; SQPSHOW.CMD - Affiche une image
 ; Syntaxe : SQPSHOW,fichier.sqp
 
-	ORG     $7600   ; Zone des utilitaires
+        ORG     $7600   ; Zone des utilitaires
 
 LINBUF  EQU     $C080
 SYSDAT  EQU     $CC0E
@@ -9,7 +9,7 @@ LINBFP  EQU     $CC14
 MEMEND  EQU     $CC2B
 PRTCHK  EQU     $CCD8
 PRTOUT  EQU     $CCE4
-WARMS	EQU     $CD03
+WARMS   EQU     $CD03
 INCH    EQU     $CD09
 INCH2   EQU     $CD0C
 GETCHR  EQU     $CD15
@@ -22,19 +22,19 @@ RPTERR  EQU     $CD3F
 INDEC   EQU     $CD48
 DOCMD   EQU     $CD4B
 CINCHNE EQU     $D3E5
-CSTAT   EQU	$D3F7
-COUTCH  EQU	$D3F9
-FMSCLS  EQU	$D403
-FMS	EQU	$D406
+CSTAT   EQU     $D3F7
+COUTCH  EQU     $D3F9
+FMSCLS  EQU     $D403
+FMS     EQU     $D406
 
 ZZZ     EQU     0
 
 START   LBSR    INIT
-	
+        
 * parse filename
         JSR     GETFIL
         LBCS    DOS_ERR
-	 
+         
 * Fixer extension par défaut (tout accepté)
         BSR     CHKEXT
 
@@ -121,8 +121,8 @@ SHWTXT2 BSR     PUTC
 
 * ouvre le  fichier
 CLOSE   LDX     #ZZZ
-	LDA	#4      ; CLOSE
-        STA	,X
+        LDA     #4      ; CLOSE
+        STA     ,X
 CALLFMS JMP     FMS
 
 * Lit un octet
@@ -138,8 +138,8 @@ READERR LEAS    4,S
         LBRA    DOS_ERR
 
 * ouvre le  fichier
-OPEN    LDD	#511    ; OPEN for READ
-        STA	,X
+OPEN    LDD     #511    ; OPEN for READ
+        STA     ,X
         BSR     CALLFMS
         BNE     OPENEND
         STX     <READ+3,PCR
@@ -149,18 +149,18 @@ OPEN    LDD	#511    ; OPEN for READ
         STB     ,X      ; sets Z=1
 OPENEND RTS
 
-PSET2   LEAY    -1,Y
+DPSET   LEAY    -1,Y
         LBRA    PSET
 
 * 2 pixels par octets
 SQP1    LDY     #0
 SQP1LP  BSR     READ
-        BSR     PSET2
+        BSR     DPSET
         LSRA
         LSRA
         LSRA
         LSRA
-        BSR     PSET2
+        BSR     DPSET
         LEAY    ,Y
         BNE     SQP1LP
         BRA     DONE
@@ -200,7 +200,7 @@ EXOIDX1 BLO     EXOCOFF
 
 EXOCPY  TFR     D,X
 EXOCPY1 BSR     READ
-        BSR     PSET2
+        BSR     DPSET
         LEAX    -1,X
         BNE     EXOCPY1
         BRA     EXOLOOP
@@ -270,35 +270,66 @@ EXOROLL ROL     ,S
         LEAY    ,U                      
         BRA     EXOLOOP
 
-PSET    PSHS    D,X
-        ANDA    #15
+PYXOFF  EQU     -10     ; PYCACHE-PXCACHE
+COOROFF EQU     -8      ; COORD-PXCACHE
+
+PSET    PSHS    A,X
+        TFR     Y,D
 PSET1   LDX     #ZZZ
-        LEAX    -4,X
-        SWI     
-        FCB     $24     ; set  color
+        INCA
+        STD     -10,X
+        ABX
+        LDA     #15
+        ANDA    ,S
+        STA     ,X
+        
+        TSTB    
+        BEQ     PFLUSH
+        PULS    A,X,PC
+
+PGET    PSHS    X
+PGET1   LDX     #ZZZ
+        CMPD    -10,X
+        BHS     PGET3
+PGET2   ABX
+        LDA     ,X      ; get color from cache
+        PULS    X,PC
+   
+PGET3   STA     -5,X
+        LDA     -10,X
+        BEQ     PGET2
+        STB     -7,X
+        LEAX    -8,X
+        SWI
+        FCB     $2F     ; get color from monitor
+        PULS    X,PC
+
+PFLUSH  LEAU    ,X
+        LEAX    -8,X
         TFR     Y,D
         STA     3,X
-        STB     1,X
+PSET2   STB     1,X
+        LDA     ,U+
+        SWI     
+        FCB     $24     ; set color
         SWI
         FCB     $2A     ; draw point        
-        PULS    D,X,PC
-
-PGET    PSHS    B,X
-PGET1   LDX     #ZZZ
-        LEAX    -4,X
-        STB     1,X
-        STA     3,X
-        SWI
-        FCB     $2F     ; get color
-        PULS    B,X,PC
+        INCB
+        BNE     PSET2
+        LDU     #0
+        PULS    A,X,PC
 
 INIT    LEAX    PXCACHE,PCR
         STX     <PSET1+1,PCR
         STX     <PGET1+1,PCR
         CLRA
         CLRB
-        STD     -4,X
         STD     -2,X
+        STD     -4,X
+        STD     -6,X
+        STD     -8,X
+        
+        STD     -10,X
 
         LEAX    SQPFCB,PCR
         LDB     #31
@@ -314,15 +345,17 @@ DOS_ERR JSR     RPTERR
         LBSR    BEEP
         LBRA    EXIT
               
-BAD_SQP	LEAX	<BAD_SQP_MSG,PCR
+BAD_SQP LEAX    <BAD_SQP_MSG,PCR
         JMP     PSTRING
-	LBRA    EXIT
+        LBRA    EXIT
 BAD_SQP_MSG
         FCC     "BAD SPQ FILE"
+
         FCB     4
                 
 ; ———— Variables Locales ————
 EXOBIBA RMB     156
+PYCACHE FDB     0        
 COORD   FDB     0,0     
         FDB     0,0
 PXCACHE RMB     256
