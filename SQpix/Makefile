@@ -3,10 +3,13 @@
 ##############################################################################
 
 CMD=SQPSHOW.CMD
-DITH=-x 
+PIC=HNY2026
+PIC=AVATAR
+PIC=MONKEY
+PIC=BART
+PIC=TIGRE
+DITH=-x
 #  --vac -o8x8 --c5x5b --o3x3
-
-
 
 STRIP=strip
 WGET=wget --no-check-certificate
@@ -53,7 +56,7 @@ all: $(BIN) $(CMD)
 
 include $(EXO2)/Makefile
 
-clean: myclean hny_clean
+clean: myclean pic_clean
 
 CC:=$(CC) -I$(EXO2)/ -I. $(EXTRA)
 LDFLAGS=-lm
@@ -109,13 +112,11 @@ update:
 
 ##############################################################################
 
-PIC=HNY2026
-
 FLEX_SYS=NEWFLEX.SYS
 ROM=SQ$(PIC).ROM
 
-hny: $(ROM) forth.zip
-hny_clean:
+pic: $(ROM) forth.zip
+pic_clean:
 	-$(RM) -rf $(ROM) samples/SQ$(PIC).SQP  forth.dir forth.zip
 
 %.zip:
@@ -146,9 +147,9 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 samples/%.SQP: samples/%.jpg $(BIN) Makefile
 	./$(BIN) $(DITH) $< -o $@ --png -z -v
 	
-hny_dbg: hny_tst,-debug
+pic_dbg: pic_tst,-debug
 
-hny_tst: hny_tst,-skip_gameinfo
+pic_tst: pic_tst,-skip_gameinfo
 
-hny_tst,%: hny
+pic_tst,%: pic
 	cd ../.. && ./mame squale $* -window -cart "$(shell cygpath -w -s $(PWD)/$(ROM))" &

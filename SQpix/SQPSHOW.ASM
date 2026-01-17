@@ -210,8 +210,8 @@ EXOTAB  FCB     4,2,4,16,48,32
 EXOCOFF BSR     EXOCOOK
         PSHS    D
         LEAX    <EXOTAB,PCR
-*        CMPD    #3
-        CMPB    #3
+        CMPD    #3
+*        CMPB    #3 <=bad optim
         BHS     EXOSCOF
         ABX
 EXOSCOF LDB     ,X
@@ -308,16 +308,34 @@ PFLUSH  LEAU    ,X
         LEAX    -8,X
         TFR     Y,D
         STA     3,X
-PSET2   STB     1,X
+        STA     7,X
+        
+PFLUSH1 STB     1,X
         LDA     ,U+
-        SWI     
-        FCB     $24     ; set color
         SWI
-        FCB     $2A     ; draw point        
+        FCB     $24     ; set color
+        CMPA    ,U+
+        BNE     PFLUSH2
         INCB
-        BNE     PSET2
+        BNE     PFLUSH4
+        DECB
+PFLUSH2 SWI
+        FCB     $2A     ; draw point             
+PFLUSH3 LEAU    -1,U
+        INCB
+        BNE     PFLUSH1
         LDU     #0
         PULS    A,X,PC
+        
+PFLUSH4 CMPA    ,U+
+        BNE     PFLUSH5
+        INCB    
+        BNE     PFLUSH4
+        DECB
+PFLUSH5 STB     5,X
+        SWI
+        FCB     $2B     ; draw line
+        BRA     PFLUSH3
 
 INIT    LEAX    PXCACHE,PCR
         STX     <PSET1+1,PCR
