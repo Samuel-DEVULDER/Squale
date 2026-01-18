@@ -4,11 +4,11 @@
 
 CMD=SQPSHOW.CMD
 PIC=HNY2026
-PIC=AVATAR
-PIC=MONKEY
+# PIC=AVATAR
+# PIC=MONKEY
 # PIC=BART
 # PIC=TIGRE
-DITH=-x
+DITH=-v -x -z --png --ratio 1
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -128,24 +128,30 @@ pic_clean:
 	@echo "Extracting $@ from $<..."
 	@$(7Z) e "$<" "system.imd" -r -so >$@
 
-%.dir/$(FLEX_SYS): %.imd $(FLEXFLOPPY)
+%.dir/$(FLEX_SYS): %.imd $(FLEXFLOPPY) 
 	@echo "Extracting $@ from $<..."
 	@$(FLEXFLOPPY) --in "$<" --extract "$(dir $@)" >/dev/null
 
 SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@echo "Building $@..."
-	@echo >STARTUP.TXT $(CMD) $*.SQP: CAT :
+	@echo >STARTUP.TXT $(CMD) $*: CAT :
 	@$(FLEXFLOPPY) --out $@ --tracks 26 --label HAPPY --number 2026 --new --rompack
 	@$(FLEXFLOPPY) --in  "$@" --add forth.dir/$(FLEX_SYS)
 	@$(FLEXFLOPPY) --in  "$@" --add STARTUP.TXT
 	@$(FLEXFLOPPY) --in  "$@" --add $(CMD)
-	@$(FLEXFLOPPY) --in  "$@" --add $< 
+	@$(FLEXFLOPPY) --in  "$@" --add $<
 	@$(FLEXFLOPPY) --in  "$@" --add forth.dir/CAT.CMD
 	@$(FLEXFLOPPY) --in  "$@" --cat
 	@$(RM) STARTUP.TXT
 
+samples/%.SQP: samples/%.png $(BIN) Makefile
+	./$(BIN) $(DITH) $< -o $@ --png
+
+samples/%.SQP: samples/%.gif $(BIN) Makefile
+	./$(BIN) $(DITH) $< -o $@ --png
+
 samples/%.SQP: samples/%.jpg $(BIN) Makefile
-	./$(BIN) $(DITH) $< -o $@ --png -z -v
+	./$(BIN) $(DITH) $< -o $@ --png
 	
 pic_dbg: pic_tst,-debug
 

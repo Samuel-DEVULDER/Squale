@@ -16,6 +16,8 @@
 #include "membuf_io.h"
 #include "exo_helper.h"
 
+#define length_of(array) (sizeof(array)/sizeof(array[0]))
+
 #ifndef TRUE
 #define TRUE    1
 #define FALSE   0
@@ -24,17 +26,9 @@
 #define PRIVATE static
 
 #define FULL_INTENSITY	255
-#define HALF_INTENSITY	187
-
-enum DITH_KIND {
-	THRESHOLD, CHECKS,
-	O2x2, O3x3, O4x4, O8x8,
-	H4x4a, H6x6a, H8x8a,
-	H4x4o, H6x6o, H8x8o,
-	C5x5b, C6x6b, C7x7b,
-	C5x5w, C6x6w, C7x7w,
-	VAC
-};
+//#define HALF_INTENSITY	187
+// #define HALF_INTENSITY	157
+#define HALF_INTENSITY	127
 
 PRIVATE uint8_t dith_vac[8][8] = {
 	{40,61, 2,39,19,43,23, 8},
@@ -195,11 +189,55 @@ PRIVATE uint8_t dith_c7w[7][7] = {
 	{46,38,37,24,36,45,49}
 };
 
-PRIVATE uint8_t exo = 0, dith_kind = THRESHOLD;
+struct dith_descriptor {
+	const char *name;
+	const char *desc;		
+	uint8_t *value;
+	uint8_t mx;
+	uint8_t my;
+	uint8_t max;
+};
+
+#define DITH_DESCRIPTOR(name, max, mat, desc) \
+	{name, desc, &mat[0][0], length_of(mat[0]), length_of(mat), \
+	max ? max : length_of(mat[0])*length_of(mat)}
+
+PRIVATE struct dith_descriptor dith_descriptors[] = {
+	DITH_DESCRIPTOR("none",   1, dith_threshold, "Threshold"),
+	
+	DITH_DESCRIPTOR("checks", 2, dith_checks,    "Checkerboard 2x2 (dither)"),
+	
+	DITH_DESCRIPTOR("o2",     0, dith_o2,        "Ordered 2x2 (dispersed)"),
+	DITH_DESCRIPTOR("o3",     0, dith_o3,        "Ordered 3x3 (dispersed)"),
+	DITH_DESCRIPTOR("o4",     0, dith_o4,        "Ordered 4x4 (dispersed)"),
+	DITH_DESCRIPTOR("o8",     0, dith_o8,        "Ordered 8x8 (dispersed)"),
+
+	DITH_DESCRIPTOR("h4a",    8, dith_h4a,       "Halftone 4x4 (angled)"),
+	DITH_DESCRIPTOR("h6a",   18, dith_h6a,       "Halftone 6x6 (angled)"),
+	DITH_DESCRIPTOR("h8a",   32, dith_h8a,       "Halftone 8x8 (angled)"),
+
+	DITH_DESCRIPTOR("h4o",    0, dith_h4o,       "Halftone 4x4 (orthogonal)"),
+	DITH_DESCRIPTOR("h6o",    0, dith_h6o,       "Halftone 6x6 (orthogonal)"),
+	DITH_DESCRIPTOR("h8o",    0, dith_h8o,       "Halftone 8x8 (orthogonal)"),
+
+	DITH_DESCRIPTOR("c5b",    0, dith_c5b,       "Circles 5x5 (black)"),
+	DITH_DESCRIPTOR("c6b",    0, dith_c6b,       "Circles 6x6 (black)"),
+	DITH_DESCRIPTOR("c7b",    0, dith_c7b,       "Circles 7x7 (black)"),
+
+	DITH_DESCRIPTOR("c5w",    0, dith_c5w,       "Circles 5x5 (white)"),
+	DITH_DESCRIPTOR("c6w",    0, dith_c6w,       "Circles 6x6 (white)"),
+	DITH_DESCRIPTOR("c7w",    0, dith_c7w,       "Circles 7x7 (white)"),
+
+	DITH_DESCRIPTOR("vac",    0, dith_vac,       "Void and cluster (8x8)"),
+	
+	{NULL}
+}, *dith_descriptor = &dith_descriptors[4];
+
+PRIVATE uint8_t exo = 0;
 PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file;
 
-PRIVATE uint8_t centered = 1, hq_zoom = 0;
+PRIVATE uint8_t centered = 1, hq_zoom = 1;
 PRIVATE float aspect_ratio = 4.0f/3.0f;
 
 typedef float vec3[3];
@@ -489,10 +527,25 @@ PRIVATE void tetra_coord(tetra *tetra, vec3 *p, vec3 *b) {
 	}
 }
 
+PRIVATE float sRGB2lin(uint8_t sRGB) {
+	static float tab[256];
+	
+	if(tab[255]==0) {
+		int i;
+		for(i=0;i<256;++i) {
+			float x = i/255.0f;
+			tab[i] = x<=0.04045f ? x/12.92f : powf((x+0.055f)/1.055f, 2.4f);
+		}
+	}
+	
+	return tab[sRGB];
+}	
+
 PRIVATE uint32_t dith_key(vec3 *p) {
-	return  (uint32_t)(24*powf((*p)[0]<=0 ? 0 : (*p)[0], 0.45f)) +
-		(uint32_t)(24*powf((*p)[1]<=0 ? 0 : (*p)[1], 0.45f))*32 +
-		(uint32_t)(24*powf((*p)[2]<=0 ? 0 : (*p)[2], 0.45f))*32*32;
+	const int base = 32;
+	return  (uint32_t)(((*p)[0]<=0 ? 0 : (*p)[0])*(base-1)) +
+		(uint32_t)(((*p)[1]<=0 ? 0 : (*p)[1])*(base-1))*base +
+		(uint32_t)(((*p)[2]<=0 ? 0 : (*p)[2])*(base-1))*base*base;
  }
 
 PRIVATE struct dith_cache {
@@ -546,15 +599,12 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 	return best_t;
 }
 
-#define length_of(array) (sizeof(array)/sizeof(array[0]))
-
-PRIVATE uint8_t dith(const uint8_t *dith, 
-		     const int mx, const int my, const int mz,
-		     const int x, const int y, vec3 *p) {
+PRIVATE uint8_t dith(const struct dith_descriptor *dith, 
+                     const int x, const int y, vec3 *p) {
 	const uint32_t key = dith_key(p);
 	struct dith_cache *cache = hmgetp_null(dith_cache, key);
 	
-	assert(mz <= length_of(cache->value));
+	assert(dith->max <= length_of(cache->value));
 
 	if(cache == NULL) {
 		tetra *t = dith_find_tetra(p);
@@ -572,19 +622,19 @@ PRIVATE uint8_t dith(const uint8_t *dith,
 		// printf("%g\n", vec3_dot(&q,&q));
 		
 		do {
-			int i = 0; float m = 0;			
-			m += sel[0]->weight * mz; while(i<m) tab[i++] = sel[0];
-			m += sel[1]->weight * mz; while(i<m) tab[i++] = sel[1];
-			m += sel[2]->weight * mz; while(i<m) tab[i++] = sel[2];
-			while(i<mz) tab[i++] = sel[3];
+			int i = 0; float m = 0.5;			
+			m += sel[0]->weight * dith->max; while(i<m) tab[i++] = sel[0];
+			m += sel[1]->weight * dith->max; while(i<m) tab[i++] = sel[1];
+			m += sel[2]->weight * dith->max; while(i<m) tab[i++] = sel[2];
+			while(i<dith->max) tab[i++] = sel[3];
 		} while(0);
 		
-		qsort(tab, mz, sizeof(tab[0]), color_cmp_by_intens);
+		qsort(tab, dith->max, sizeof(tab[0]), color_cmp_by_intens);
 		
 		do {
 			struct dith_cache new_entry; int i;
 			new_entry.key = key;
-			for(i=0; i<mz; ++i) new_entry.value[i] = tab[i]->index;
+			for(i=0; i<dith->max; ++i) new_entry.value[i] = tab[i]->index;
 			hmputs(dith_cache, new_entry);
 		} while(0);
 		
@@ -596,7 +646,7 @@ PRIVATE uint8_t dith(const uint8_t *dith,
 		// exit(0);
 	}
 	
-	return cache->value[dith[(x % mx)*my + (y % my)]-1];
+	return cache->value[dith->value[(y % dith->my)*dith->mx + (x % dith->mx)]-1];
 }
 
 typedef struct {
@@ -686,6 +736,14 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 	if(hq_zoom) {
 		int w, h;
 		squale_coord(pic, 256, 256, &w, &h);
+		
+		if(aspect_ratio>=1) {
+			h = (h*256)/w;
+			w = 256;
+		} else {
+			w = (w*256)/h;
+			h = 256;
+		}
 		
 		if(w!=pic->w || h!=pic->h) {
 			uint8_t *buf = stbir_resize_uint8_srgb(
@@ -807,20 +865,6 @@ PRIVATE void pic_save_png(pic *pic, const char *filename) {
 }
 
 
-PRIVATE float sRGB2lin(uint8_t sRGB) {
-	static float tab[256];
-	
-	if(tab[255]==0) {
-		int i;
-		for(i=0;i<256;++i) {
-			float x = i/255.0f;
-			tab[i] = x<=0.04045f ? x/12.92f : powf((x+0.055f)/1.055f, 2.4f);
-		}
-	}
-	
-	return tab[sRGB];
-}	
-
 PRIVATE vec3 *pic_get_linear_color(pic *pic, int x, int y, vec3 *ret) {
 	
 	if(x<0 || y<0 || x>=pic->w || y>=pic->h) {
@@ -863,45 +907,15 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 }
 
 PRIVATE void pic_dither(pic *pic, int x, int y) {
-	uint8_t *dt;
-	int dx,dy,dm;
 	vec3 p; 
-
-	x &= 255; y &= 255;
-
-#define dmdtdxdy(mx, m)	dt = &m[0][0]; \
-			dy = length_of(m); \
-			dx = length_of(m[0]); \
-			dm = mx
-	switch(dith_kind) {
-	case VAC:	dmdtdxdy(64, dith_vac); 	break;
-	case CHECKS:	dmdtdxdy( 2, dith_checks); 	break;
-	case O2x2:	dmdtdxdy( 4, dith_o2); 		break;
-	case O3x3:	dmdtdxdy( 9, dith_o3); 		break;
-	case O4x4:	dmdtdxdy(16, dith_o4); 		break;
-	case O8x8:	dmdtdxdy(64, dith_o8); 		break;
-	case H4x4a:	dmdtdxdy( 8, dith_h4a);		break;
-	case H6x6a:	dmdtdxdy(18, dith_h6a);		break;
-	case H8x8a:	dmdtdxdy(32, dith_h8a);		break;
-	case H4x4o:	dmdtdxdy(16, dith_h4o);		break;
-	case H6x6o:	dmdtdxdy(36, dith_h6o);		break;
-	case H8x8o:	dmdtdxdy(64, dith_h8o);		break;
-	case C5x5b:	dmdtdxdy(25, dith_c5b);		break;
-	case C6x6b:	dmdtdxdy(36, dith_c6b);		break;
-	case C7x7b:	dmdtdxdy(49, dith_c7b);		break;
-	case C5x5w:	dmdtdxdy(25, dith_c5w);		break;
-	case C6x6w:	dmdtdxdy(36, dith_c6w);		break;
-	case C7x7w:	dmdtdxdy(49, dith_c7w);		break;
-	default: 	dmdtdxdy( 1, dith_threshold);	break;
-	}
-#undef dmdtdxdy
-
-	int8_t c = dith(dt, dx, dy, dm, x, y, 
-			squale_color(pic, x, y, &p));
+	
+	uint8_t c = dith(dith_descriptor,  x & 255, y & 255, 
+	  		 squale_color(pic, x & 255, y & 255, &p));
 	
 	pic->bitmap[x + y*256] = c; //*0+(((x/30)+(y/30))%14);
 }
 
+// hilbert cuve improve cache hits
 PRIVATE void pic_conv_h(pic *pic) {
 	static int dir[] = {256,1,-256,-1}, a, p = 0, l = 8, b = 1;
 	if(pic==NULL)  {
@@ -934,18 +948,34 @@ PRIVATE void pic_conv_l(pic *pic) {
 
 PRIVATE void init(void) {
 	static uint16_t tetras_desc[] = {
+#if HALF_INTENSITY==187
 		0x0518, 0x0458, 0x0248, 0x4268, 
 		0x0328, 0x0138, 0x1389, 0x5189, 
 		0x682A, 0x328A, 0x3A8B, 0x8A7B, 
 		0x879B, 0x389B, 0x584C, 0x486C, 
 		0x87CD, 0x58CD, 0x897D, 0x598D, 
 		0x78CE, 0x6C8E, 0x68AE, 0x7A8E
+#elif HALF_INTENSITY==157
+		0x4268, 0x0328, 0x0138, 0x5048, 
+		0x0248, 0x5108, 0x1389, 0x5189, 
+		0x283A, 0x268A, 0x879B, 0x389B, 
+		0x8A7B, 0x3A8B, 0x486C, 0x584C, 
+		0x58CD, 0x598D, 0x789D, 0x7C8D, 
+		0x86CE, 0x7A8E, 0x8A6E, 0x78CE
+#else
 		// 0x0138, 0x0248, 0x4268, 0x0518, 
 		// 0x0458, 0x0328, 0x1389, 0x1859, 
 		// 0x283A, 0x268A, 0x78AB, 0x798B, 
 		// 0x389B, 0x3A8B, 0x486C, 0x458C, 
 		// 0x859D, 0x789D, 0x7C8D, 0x8C5D, 
 		// 0x8A6E, 0x7A8E, 0x78CE, 0x86CE
+		// 0x2648, 0x0328, 0x1058, 0x0248, 0x0458, 0x1308, 0x1389, 0x1859, 0x328A, 0x268A, 0x78AB, 0x798B, 0x389B, 0x3A8B, 0x486C, 0x458C, 0x789D, 0x859D, 0x7C8D, 0x8C5D, 0x68AE, 0x7A8E, 0x78CE, 0x6C8E
+		// 0x1048, 0x2138, 0x2608, 0x0648, 0x1458, 0x2018, 0x1859, 0x1389, 0x268A, 0x283A, 0x3A8B, 0x78AB, 0x389B, 0x798B, 0x584C, 0x486C, 0x8C5D, 0x859D, 0x7C8D, 0x789D, 0x86CE, 0x8A6E, 0x78CE, 0x7A8E
+		// 0x0268, 0x5108, 0x0648, 0x1208, 0x1328, 0x5048, 0x1389, 0x1859, 0x283A, 0x268A, 0x879B, 0x389B, 0x8A7B, 0x3A8B, 0x486C, 0x458C, 0x897D, 0x598D, 0x87CD, 0x58CD, 0x7A8E, 0x6C8E, 0x78CE, 0x68AE
+		// 0x0138, 0x0328, 0x4518, 0x6408, 0x0418, 0x6028, 0x5189, 0x1389, 0x832A, 0x826A, 0x389B, 0x78AB, 0x3A8B, 0x798B, 0x648C, 0x584C, 0x58CD, 0x789D, 0x598D, 0x7C8D, 0x8C7E, 0x6C8E, 0x68AE, 0x87AE
+		// 0x6428, 0x0458, 0x3208, 0x3018, 0x0518, 0x0248, 0x1859, 0x3819, 0x283A, 0x682A, 0x3A8B, 0x78AB, 0x389B, 0x798B, 0x458C, 0x486C, 0x598D, 0x58CD, 0x7C8D, 0x789D, 0x68AE, 0x6C8E, 0x78CE, 0x7A8E
+		0x0128, 0x0518, 0x0268, 0x0648, 0x1328, 0x0458, 0x1389, 0x1859, 0x328A, 0x826A, 0x3A8B, 0x78AB, 0x389B, 0x798B, 0x458C, 0x648C, 0x789D, 0x58CD, 0x598D, 0x7C8D, 0x86CE, 0x78CE, 0x7A8E, 0x8A6E
+#endif
 	};
 	int i;
 	
@@ -967,36 +997,27 @@ PRIVATE void init(void) {
 }
 
 PRIVATE void usage(char *av0) {
-	printf("Usage: %s [options] <inputimage.ext>\n", av0);
+	int i;
+	
+	printf("Usage: %s [options] <image.ext>\n", av0);
 	printf("options:\n");
-	printf(" ?, -h, --help\n"
-               "            : Prints this help\n");
+	printf(" ?, -h, --help : Prints this help\n");
 
-	printf(" -v         : Verbose\n");
-	printf(" -o <name>  : Specify output file\n");
-
-	printf(" --exo, -z  : Compresses with exomizer\n");
-	printf(" --png      : Output png image (for preview)\n");
-	printf(" --pgm      : Output pgm image (for preview)\n");
-
-	printf(" --vac      : Void and cluster (dither)\n");
-	printf(" --checks   : Checkerboard 2x1 (dither)\n");
-	printf(" --o2x2     : Ordered 2x2 (dispersed)\n");
-	printf(" --o3x3     : Ordered 3x3 (dispersed)\n");
-	printf(" --o4x4, -x : Ordered 4x4 (dispersed)\n");
-	printf(" --o8x8     : Ordered 8x8 (dispersed)\n");
-	printf(" --h4x4a    : Halftone 4x4 (angled)\n");
-	printf(" --h6x6a    : Halftone 6x6 (angled)\n");
-	printf(" --h8x8a    : Halftone 8x8 (angled)\n");
-	printf(" --h4x4o    : Halftone 4x4 (orthogonal)\n");
-	printf(" --h6x6o    : Halftone 6x6 (orthogonal)\n");
-	printf(" --h8x8o    : Halftone 8x8 (orthogonal)\n");
-	printf(" --c5x5b    : Circles 5x5 (black)\n");
-	printf(" --c6x6b    : Circles 6x6 (black)\n");
-	printf(" --c7x7b    : Circles 7x7 (black)\n");
-	printf(" --c5x5w    : Circles 5x5 (white)\n");
-	printf(" --c6x6w    : Circles 6x6 (white)\n");
-	printf(" --c7x7w    : Circles 7x7 (white)\n");
+	printf(" -v            : Verbose\n");
+	printf(" -o <name>     : Specify output file\n");
+	printf(" -x            : same as --o4\n");
+	printf(" -z            : same as --exo\n");
+	printf("\n");
+	
+	printf(" --exo         : Compresses with exomizer\n");
+	printf(" --png         : Output png image (for preview)\n");
+	printf(" --pgm         : Output pgm image (for preview)\n");
+	printf(" --ratio <num> : Sets aspect ratio\n");
+	printf("\n");
+	
+	for(i=0; dith_descriptors[i].name; ++i)
+	printf(" --%-11s : %s\n", dith_descriptors[i].name, dith_descriptors[i].desc);
+	
 	exit(0);
 }
 
@@ -1010,6 +1031,10 @@ PRIVATE void parse(int ac, char **av) {
 
 		else if(!strcmp("-v", av[i])) 
 			verbose = 1;
+		else if(!strcmp("-o", av[i]) && i<ac-1)
+			output_file = av[++i];
+		else if(!strcmp("-x", av[i])) 
+			dith_descriptor = &dith_descriptors[4];
 		else if(!strcmp("--exo", av[i])
                      || !strcmp("-z",   av[i]))
 			exo = 1;
@@ -1017,47 +1042,17 @@ PRIVATE void parse(int ac, char **av) {
 			pgm = 1;
 		else if(!strcmp("--png", av[i])) 
 			png = 1;
-
-		else if(!strcmp("--vac", av[i])) 
-			dith_kind = VAC;
-		else if(!strcmp("--checks", av[i])) 
-			dith_kind = CHECKS;
-		else if(!strcmp("--o2x2", av[i])) 
-			dith_kind = O2x2;
-		else if(!strcmp("--o3x3", av[i])) 
-			dith_kind = O3x3;
-		else if(!strcmp("--o4x4", av[i])
-		     || !strcmp("-x",     av[i])) 
-			dith_kind = O4x4;
-		else if(!strcmp("--o8x8", av[i])) 
-			dith_kind = O8x8;
-		else if(!strcmp("--h4x4a", av[i])) 
-			dith_kind = H4x4a;
-		else if(!strcmp("--h6x6a", av[i])) 
-			dith_kind = H6x6a;
-		else if(!strcmp("--h8x8a", av[i])) 
-			dith_kind = H8x8a;
-		else if(!strcmp("--h4x4o", av[i])) 
-			dith_kind = H4x4o;
-		else if(!strcmp("--h6x6o", av[i])) 
-			dith_kind = H6x6o;
-		else if(!strcmp("--h8x8o", av[i])) 
-			dith_kind = H8x8o;
-		else if(!strcmp("--c5x5b", av[i])) 
-			dith_kind = C5x5b;
-		else if(!strcmp("--c6x6b", av[i])) 
-			dith_kind = C6x6b;
-		else if(!strcmp("--c7x7b", av[i])) 
-			dith_kind = C7x7b;
-		else if(!strcmp("--c5x5w", av[i])) 
-			dith_kind = C5x5w;
-		else if(!strcmp("--c6x6w", av[i])) 
-			dith_kind = C6x6w;
-		else if(!strcmp("--c7x7w", av[i])) 
-			dith_kind = C7x7w;
-
-		else if(!strcmp("-o", av[i]) && i<ac-1)
-			output_file = av[++i];
+		else if(!strcmp("--ratio", av[i]) && i<ac-1)
+			aspect_ratio = atof(av[++i]);
+		else if(!strncmp("--", av[i], 2)) {
+			int j;
+			for(j=0; dith_descriptors[j].name;++j) {
+				if(!strcmp(dith_descriptors[j].name, av[i]+2)) {
+					dith_descriptor = &dith_descriptors[j];
+					break;
+				}
+			}
+		}
 		else if(input_file == NULL)
 			input_file = av[i];
 		else {
