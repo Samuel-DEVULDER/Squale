@@ -1012,6 +1012,7 @@ PRIVATE void usage(char *av0) {
 	printf(" --exo         : Compresses with exomizer\n");
 	printf(" --png         : Output png image (for preview)\n");
 	printf(" --pgm         : Output pgm image (for preview)\n");
+	printf(" --low         : Low quality resizing\n");
 	printf(" --ratio <num> : Sets aspect ratio\n");
 	printf("\n");
 	
@@ -1042,6 +1043,8 @@ PRIVATE void parse(int ac, char **av) {
 			pgm = 1;
 		else if(!strcmp("--png", av[i])) 
 			png = 1;
+		else if(!strcmp("--low", av[i])) 
+			hq_zoom = 0;
 		else if(!strcmp("--ratio", av[i]) && i<ac-1)
 			aspect_ratio = atof(av[++i]);
 		else if(!strncmp("--", av[i], 2)) {
