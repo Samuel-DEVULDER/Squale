@@ -27,8 +27,8 @@
 
 #define FULL_INTENSITY	255
 //#define HALF_INTENSITY	187
-// #define HALF_INTENSITY	157
-#define HALF_INTENSITY	127
+#define HALF_INTENSITY	157
+// #define HALF_INTENSITY	127
 
 PRIVATE uint8_t dith_vac[8][8] = {
 	{40,61, 2,39,19,43,23, 8},
@@ -189,6 +189,44 @@ PRIVATE uint8_t dith_c7w[7][7] = {
 	{46,38,37,24,36,45,49}
 };
 
+// https://perso.liris.cnrs.fr/victor.ostromoukhov/publications/pdf/SPIE95_RotatedNonBayer.pdf
+
+PRIVATE uint8_t dith_hexx[18][12] = {
+	{  1, 55,100, 46,  6, 60,105, 51,  9, 63,108, 54},
+	{ 91, 37, 19, 73, 96, 42, 24, 78, 99, 45, 27, 81},
+	{ 10, 64, 88, 34, 15, 69, 83, 29, 18, 72, 85, 31}, 
+	{103, 49,  7, 61,106, 54,  2, 56,101, 47,  4, 58}, 
+	{ 22, 76, 97, 43, 25, 79, 92, 38, 20, 74, 94, 40}, 
+	{ 84, 30, 16, 70, 86, 32, 11, 65, 89, 35, 13, 67},
+	{  3, 57,102, 48,  5, 59,104, 50,  8, 62,107, 53},
+	{ 93, 39, 21, 75, 95, 41, 23, 77, 98, 44, 26, 80},
+	{ 12, 66, 90, 36, 17, 68, 82, 28, 17, 71, 87, 33},
+	{105, 51,  9, 63,108, 54,  1, 55,100, 46,  6, 60}, 
+	{ 24, 78, 99, 45, 27, 81, 91, 37, 19, 73, 96, 42},
+	{ 83, 29, 18, 72, 85, 31, 10, 64, 88, 34, 15, 69},
+	{  2, 56,101, 47,  4, 58,103, 49,  7, 61,106, 52},
+	{ 92, 38, 20, 74, 94, 40, 22, 76, 97, 43, 25, 79},
+	{ 11, 65, 89, 35, 13, 67, 84, 30, 16, 70, 86, 32},
+	{104, 50,  8, 62,107, 53,  3, 57,102, 48,  5, 59},
+	{ 23, 77, 98, 44, 26, 80, 93, 39, 21, 75, 95, 41},
+	{ 82, 28, 17, 71, 87, 33, 12, 66, 90, 36, 14, 68}
+}; 
+
+PRIVATE uint8_t dith_hex[12][18] = {
+	{  1, 91, 10,103, 22, 84,  3, 93, 12,105, 24, 83,  2, 92, 11,104, 23, 82},
+	{ 55, 37, 64, 49, 76, 30, 57, 39, 66, 51, 78, 29, 56, 38, 65, 50, 77, 28},
+	{100, 19, 88,  7, 97, 16,102, 21, 90,  9, 99, 18, 101, 20, 89, 8, 98, 17},
+	{ 46, 73, 34, 61, 43, 70, 48, 75, 36, 63, 45, 72, 47, 74, 35, 62, 44, 71},
+	{  6, 96, 15,106, 25, 86,  5, 95, 17,108, 27, 85,  4, 94, 13,107, 26, 87},
+	{ 60, 42, 69, 54, 79, 32, 59, 41, 68, 54, 81, 31, 58, 40, 67, 53, 80, 33},
+	{105, 24, 83,  2, 92, 11,104, 23, 82,  1, 91, 10,103, 22, 84,  3, 93, 12},
+	{ 51, 78, 29, 56, 38, 65, 50, 77, 28, 55, 37, 64, 49, 76, 30, 57, 39, 66},
+	{  9, 99, 18, 101, 20, 89, 8, 98, 17,100, 19, 88,  7, 97, 16,102, 21, 90},
+	{ 63, 45, 72, 47, 74, 35, 62, 44, 71, 46, 73, 34, 61, 43, 70, 48, 75, 36},
+	{108, 27, 85,  4, 94, 13,107, 26, 87,  6, 96, 15,106, 25, 86,  5, 95, 14},
+	{ 54, 81, 31, 58, 40, 67, 53, 80, 33, 60, 42, 69, 52, 79, 32, 59, 41, 68}
+};
+
 struct dith_descriptor {
 	const char *name;
 	const char *desc;		
@@ -229,6 +267,8 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 	DITH_DESCRIPTOR("c7w",    0, dith_c7w,       "Circles 7x7 (white)"),
 
 	DITH_DESCRIPTOR("vac",    0, dith_vac,       "Void and cluster (8x8)"),
+
+	DITH_DESCRIPTOR("hex",  108, dith_hex,	     "Hexagonal (18x12)"),
 	
 	{NULL}
 }, *dith_descriptor = &dith_descriptors[4];
@@ -550,7 +590,7 @@ PRIVATE uint32_t dith_key(vec3 *p) {
 
 PRIVATE struct dith_cache {
 	uint32_t key;
-	uint8_t  value[64];
+	uint8_t  value[128];
 } *dith_cache;
 
 PRIVATE tetra *dith_find_tetra(vec3 *p) {
@@ -701,8 +741,8 @@ PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
 		fx = (x*h*aspect_ratio)/256  + (centered ? 0.5f*(w - h*aspect_ratio) : 0);
 		fy = (y*h)/256;
 	} else {
-		fx = (x*w)/(256);
-		fy = (y*w/aspect_ratio)/(256) + (centered ? 0.5f*(h - w/aspect_ratio) : 0);
+		fx = (x*w)/256;
+		fy = (y*w/aspect_ratio)/256 + (centered ? 0.5f*(h - w/aspect_ratio) : 0);
 	}
 	*rx = nearbyintf(fx);
 	*ry = nearbyintf(fy);
@@ -737,7 +777,7 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 		int w, h;
 		squale_coord(pic, 256, 256, &w, &h);
 		
-		if(aspect_ratio>=1) {
+		if(h>w) {
 			h = (h*256)/w;
 			w = 256;
 		} else {

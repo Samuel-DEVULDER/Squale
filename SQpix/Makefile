@@ -8,7 +8,7 @@ PIC=HNY2026
 # PIC=MONKEY
 # PIC=BART
 # PIC=TIGRE
-DITH=-v --vac -z --png --low
+DITH=-v --hex -z --png 
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
