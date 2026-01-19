@@ -300,8 +300,7 @@ PGET3   STA     -5,X
         BEQ     PGET2
         STB     -7,X
         LEAX    -8,X
-        SWI
-        FCB     $2F     ; get color from monitor
+        BSR     POINT
         PULS    X,PC
 
 PFLUSH  LEAU    ,X
@@ -312,15 +311,13 @@ PFLUSH  LEAU    ,X
         
 PFLUSH1 STB     1,X
         LDA     ,U+
-        SWI
-        FCB     $24     ; set color
+        BSR     PCOL
         CMPA    ,U+
         BNE     PFLUSH2
         INCB
         BNE     PFLUSH4
         DECB
-PFLUSH2 SWI
-        FCB     $2A     ; draw point             
+PFLUSH2 BSR     PLOT
 PFLUSH3 LEAU    -1,U
         INCB
         BNE     PFLUSH1
@@ -333,9 +330,27 @@ PFLUSH4 CMPA    ,U+
         BNE     PFLUSH4
         DECB
 PFLUSH5 STB     5,X
-        SWI
-        FCB     $2B     ; draw line
+        BSR     LINE
         BRA     PFLUSH3
+
+GFXCTX  LDB     #$F0
+        TFR     B,DP
+        
+POINT   SWI
+        FCB     $2F     ; get color from monitor
+        RTS
+        
+PCOL    SWI
+        FCB     $24     ; set color
+        RTS
+        
+PLOT    SWI
+        FCB     $2A     ; draw point             
+        RTS
+        
+LINE    SWI
+        FCB     $2B     ; draw line
+        RTS
 
 INIT    LEAX    PXCACHE,PCR
         STX     <PSET1+1,PCR
