@@ -290,17 +290,9 @@ PSET1   LDX     #ZZZ
 PGET    PSHS    X
 PGET1   LDX     #ZZZ
         CMPD    -10,X
-        BHS     PGET3
+        BHS     HWPGET
 PGET2   ABX
         LDA     ,X      ; get color from cache
-        PULS    X,PC
-   
-PGET3   STA     -5,X
-        LDA     -10,X
-        BEQ     PGET2
-        STB     -7,X
-        LEAX    -8,X
-        BSR     POINT
         PULS    X,PC
 
 PFLUSH  LEAU    ,X
@@ -332,13 +324,7 @@ PFLUSH4 CMPA    ,U+
 PFLUSH5 STB     5,X
         BSR     LINE
         BRA     PFLUSH3
-
-GFXCTX  LDB     #$F0
-        TFR     B,DP
-        
-POINT   SWI
-        FCB     $2F     ; get color from monitor
-        RTS
+* U=E787
         
 PCOL    SWI
         FCB     $24     ; set color
@@ -372,6 +358,29 @@ LOOP    SET     *
         BPL     LOOP
         
         RTS
+
+HWPGET  STA     >$F00B  
+        LDA     -10,X   
+        BEQ     PGET2        
+        LDX     #$F000
+        STB     9,X
+        LDD     #$0F04
+        STA     ,X
+HWPGET1 BITB    ,X
+        BEQ     HWPGET1
+        LDD     #$2003
+        ANDB    9,X
+        LSRB
+        BEQ     HWPGET2
+        ORA     #16
+HWPGET2 LDA     A,X
+        BCS     HWPGET3
+        LSRA
+        LSRA
+        LSRA
+        LSRA
+HWPGET3 ANDA    #$0F
+        PULS    X,PC
 
 ; ———— Gestion des Erreurs ————
 DOS_ERR JSR     RPTERR
