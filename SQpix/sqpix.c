@@ -1089,6 +1089,7 @@ PRIVATE void usage(char *av0) {
 	printf(" -o <name>     : Specify output file\n");
 	printf(" -x            : same as --o4\n");
 	printf(" -z            : same as --exo\n");
+	printf(" -r <num>      : same as --ratio\n");
 	printf("\n");
 	
 	printf(" --exo         : Compresses with exomizer\n");
@@ -1127,7 +1128,8 @@ PRIVATE void parse(int ac, char **av) {
 			png = 1;
 		else if(!strcmp("--low", av[i])) 
 			hq_zoom = 0;
-		else if(!strcmp("--ratio", av[i]) && i<ac-1)
+		else if((!strcmp("--ratio", av[i]) && i<ac-1)
+	             || (!strcmp("-r", av[i]) && i<ac-1))
 			aspect_ratio = atof(av[++i]);
 		else if(!strncmp("--", av[i], 2)) {
 			int j;

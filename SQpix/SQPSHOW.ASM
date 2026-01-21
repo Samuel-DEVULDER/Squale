@@ -27,7 +27,18 @@ COUTCH  EQU     $D3F9
 FMSCLS  EQU     $D403
 FMS     EQU     $D406
 
-ZZZ     EQU     0
+GFX_CMD EQU     $00
+GFX_DX  EQU     $05
+GFX_DY  EQU     $07
+GFX_XH  EQU     $08
+GFX_XL  EQU     $09
+GFX_YH  EQU     $0A
+GFX_YL  EQU     $0B
+GFX_COL EQU     $10
+BAK_COL EQU     $E787
+
+
+ZZZ     EQU     $5555
 
 START   LBSR    INIT
         
@@ -275,9 +286,9 @@ COOROFF EQU     -8      ; COORD-PXCACHE
 
 PSET    PSHS    A,X
         TFR     Y,D
-PSET1   LDX     #ZZZ
+PSET1   LDX     #ZZZ    ; PXCACHE /!\ modified
         INCA
-        STD     -10,X
+        STD     -2,X    ; PYCACHE
         ABX
         LDA     #15
         ANDA    ,S
@@ -288,79 +299,63 @@ PSET1   LDX     #ZZZ
         PULS    A,X,PC
 
 PGET    PSHS    X
-PGET1   LDX     #ZZZ
-        CMPD    -10,X
+PGET1   LDX     #ZZZ    ; PXCACHE /!\ modified
+        CMPD    -2,X    ; PYCACHE
         BHS     HWPGET
 PGET2   ABX
         LDA     ,X      ; get color from cache
         PULS    X,PC
 
-PFLUSH  LEAU    ,X
-        LEAX    -8,X
+PFLUSH  LDU     #$F000
         TFR     Y,D
-        STA     3,X
-        STA     7,X
-        
-PFLUSH1 STB     1,X
-        LDA     ,U+
-        BSR     PCOL
-        CMPA    ,U+
-        BNE     PFLUSH2
-        INCB
-        BNE     PFLUSH4
-        DECB
-PFLUSH2 BSR     PLOT
-PFLUSH3 LEAU    -1,U
-        INCB
-        BNE     PFLUSH1
+        STB     GFX_XL,U
+        STB     GFX_YH,U
+        STA     GFX_YL,U
+        STB     GFX_XH,U
+        COMB    
+        STB     GFX_XL,U
+PFLUSH1 LDD     #$F0FF
+        ANDA    BAK_COL
+        ORA     ,X+
+        STA     BAK_COL
+        ANDA    #15
+PFLUSH2 INCB
+        CMPA    ,X+
+        BEQ     PFLUSH2
+        BSR     GFXWAIT
+        STA     GFX_COL,U
+        STB     GFX_DX,U
+        INC     GFX_XL,U
+        LDA     #$10            ; ignore DY, DX>0
+        STA     ,U
+        LDA     ,-X             ; sentinel ?
+        BPL     PFLUSH1
+        BSR     GFXWAIT
         LDU     #0
         PULS    A,X,PC
-        
-PFLUSH4 CMPA    ,U+
-        BNE     PFLUSH5
-        INCB    
-        BNE     PFLUSH4
-        DECB
-PFLUSH5 STB     5,X
-        BSR     LINE
-        BRA     PFLUSH3
-* U=E787
-        
-PCOL    SWI
-        FCB     $24     ; set color
-        RTS
-        
-PLOT    SWI
-        FCB     $2A     ; draw point             
-        RTS
-        
-LINE    SWI
-        FCB     $2B     ; draw line
-        RTS
 
+GFXWAIT PSHS    B
+        LDB     #4
+GFXWAI2 BITB    ,U
+        BEQ     GFXWAI2
+        PULS    B,PC
+        
 INIT    LEAX    PXCACHE,PCR
         STX     <PSET1+1,PCR
         STX     <PGET1+1,PCR
-        CLRA
-        CLRB
-        STD     -2,X
-        STD     -4,X
-        STD     -6,X
-        STD     -8,X
-        
-        STD     -10,X
-
+        LDD     #-31*256
+        STB     -2,X
+        STB     -1,X
         LEAX    SQPFCB,PCR
-        LDB     #31
-LOOP    SET     *
-        STA     B,X
-        DECB
-        BPL     LOOP
-        
+        STA     -1,X    ; sentinel
+        NEGA
+INIT2   STB     A,X
+        DECA
+        BPL     INIT2
         RTS
 
 HWPGET  STA     >$F00B  
-        LDA     -10,X   
+        LDA     -2,X   
         BEQ     PGET2        
         LDX     #$F000
         STB     9,X
@@ -398,9 +393,7 @@ BAD_SQP_MSG
 ; ———— Variables Locales ————
 EXOBIBA RMB     156
 PYCACHE FDB     0        
-COORD   FDB     0,0     
-        FDB     0,0
-PXCACHE RMB     256
+PXCACHE RMB     256+1
 SQPFCB  RMB     320     ; FCB fichier
 
 ENDATA  set     *
