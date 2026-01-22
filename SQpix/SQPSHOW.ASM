@@ -308,7 +308,6 @@ PGET2   ABX
 
 PFLUSH  LDU     #$F000
         TFR     Y,D
-        STB     GFX_XL,U
         STB     GFX_YH,U
         STA     GFX_YL,U
         STB     GFX_XH,U
