@@ -313,7 +313,7 @@ PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file;
 
 PRIVATE uint8_t centered = 1, hq_zoom = 1;
-PRIVATE float aspect_ratio = 4.0f/3.0f;
+PRIVATE float aspect_ratio = 1.0f;
 
 typedef float vec3[3];
 
@@ -1089,14 +1089,14 @@ PRIVATE void usage(char *av0) {
 	printf(" -o <name>     : Specify output file\n");
 	printf(" -x            : same as --o4\n");
 	printf(" -z            : same as --exo\n");
-	printf(" -r <num>      : same as --ratio\n");
+	printf(" -r <w:h>      : same as --ratio\n");
 	printf("\n");
 	
 	printf(" --exo         : Compresses with exomizer\n");
 	printf(" --png         : Output png image (for preview)\n");
 	printf(" --pgm         : Output pgm image (for preview)\n");
 	printf(" --low         : Low quality resizing\n");
-	printf(" --ratio <num> : Sets aspect ratio\n");
+	printf(" --ratio <w:h> : Sets aspect ratio\n");
 	printf("\n");
 	
 	for(i=0; dith_descriptors[i].name; ++i)
@@ -1128,9 +1128,24 @@ PRIVATE void parse(int ac, char **av) {
 			png = 1;
 		else if(!strcmp("--low", av[i])) 
 			hq_zoom = 0;
-		else if((!strcmp("--ratio", av[i]) && i<ac-1)
-	             || (!strcmp("-r", av[i]) && i<ac-1))
-			aspect_ratio = atof(av[++i]);
+		else if(i<ac-1 && (
+			 !strcmp("--ratio", av[i]) ||
+			 !strcmp("-r", av[i])
+			 )) {
+			char *s = av[++i];		
+			float x,y;
+			if(sscanf(s, "%f:%f", &x, &y)!=2) {
+				y = 1.0f;
+				if(sscanf(s,"%f", &x) != 1) {
+					x = y = -1.0f;
+				}
+			}
+			if(y<=0) {
+				fprintf(stderr, "Invalid ratio: %s\n" , av[i]);
+				exit(-1);
+			}
+			aspect_ratio = fabsf(x/y);
+		} 
 		else if(!strncmp("--", av[i], 2)) {
 			int j;
 			for(j=0; dith_descriptors[j].name;++j) {

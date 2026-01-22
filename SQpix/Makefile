@@ -8,7 +8,8 @@ PIC=HNY2026
 # PIC=MONKEY
 # PIC=BART
 # PIC=TIGRE
-DITH=-v -x -z --png 
+RATIO=1
+DITH=-v -x -z --png -r $(RATIO)
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -158,4 +159,5 @@ pic_dbg: pic_tst,-debug
 pic_tst: pic_tst,-skip_gameinfo
 
 pic_tst,%: pic
-	cd ../.. && ./mame squale $* -window -cart "$(shell cygpath -w -s $(PWD)/$(ROM))" &
+	cd ../.. && ./mame squale $* -window -keepaspect -effect scanlines \
+	-cart "$(shell cygpath -w -s $(PWD)/$(ROM))" &
