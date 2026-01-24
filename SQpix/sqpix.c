@@ -25,6 +25,13 @@
 
 #define PRIVATE static
 
+#define FATAL(fmt, value, num) do {		\
+	fprintf(stderr, fmt"\n", value); 	\
+	if(num) exit(num); 			\
+	} while(0)
+
+#define OUT_OF_MEM(n) 	FATAL("Out of memory: %d bytes", n, -1);
+
 #define FULL_INTENSITY	255
 //#define HALF_INTENSITY	187
 #define HALF_INTENSITY	157
@@ -310,12 +317,82 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 
 PRIVATE uint8_t exo = 0;
 PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
-PRIVATE char *input_file, *output_file;
+PRIVATE char *input_file, *output_file = "%p%N.SQP";
 
 PRIVATE uint8_t centered = 1, hq_zoom = 1;
 PRIVATE float aspect_ratio = 1.0f;
 
 typedef float vec3[3];
+
+PRIVATE char flex9char(char c) {
+	if((c>='0' && c<='9')
+	|| (c>='A' && c<='Z')) return c;
+	if((c>='a' && c<='z')) return c+'A'-'a';
+	return 0;
+}
+
+PRIVATE const char *path_format(const char *fmt, const char *path) {
+	const char *ext = NULL, *name = NULL, *end = NULL;
+	char *out = NULL;
+	const char *s, *t;
+	
+	// fint name, ext, etc
+	for(s = path; *s; ++s); 
+	end = s;
+	while(s>path) {
+		--s;
+		if(*s=='.' && ext==NULL) ext = s;
+		else if(*s=='/' || *s=='\\') {
+			name = s + 1;
+			if(ext==NULL) ext = end;
+			break;
+		}
+	}
+	if(name==NULL) name = ext = end;
+	
+	// now format
+	for(s = fmt; *s; ++s) {
+		int n;
+		
+		if(*s=='%') {
+			switch(*++s) {
+			case '%': arrput(out , '%'); break;
+				
+			case 's': for(t = path; t<end; ++t) arrput(out, *t); break;
+			case 'e': for(t = ext;  t<end; ++t) arrput(out, *t); break;
+			case 'n': for(t = name; t<ext; ++t) arrput(out, *t); break;
+
+			case 'P': case 'p': 
+				for(t = path; t<name; ++t) {arrput(out, *t);} break;
+				
+			case 'E':
+				for(n = 0, t = ext; t<end && n<3; ++t) {
+					char c = flex9char(*t);
+					if(c) {arrput(out, c); ++n;}
+				}
+				break;
+				
+			case 'N':
+				for(n = 0, t = name; t<ext && n<8; ++t) {
+					char c = flex9char(*t);
+					if(c) {arrput(out, c); ++n;}
+				}
+				break;
+				
+			default:
+				FATAL("Invalid format specifier : %%%c", *s, -1);
+			}
+		} else if(*s=='/' || *s=='\\') {
+			n = arrlenu(out) - 1;
+			if(n>0 && out[n]!='/' && out[n]!='\\') arrput(out, *s);
+		} else arrput(out, *s);
+	}
+	arrput(out, '\0');
+	s = strdup(out);
+	arrfree(out);
+	if(s==NULL) OUT_OF_MEM(arrlenu(out));
+	return s;
+}
 
 PRIVATE vec3 *vec3_set(vec3 *t, float x, float y, float z) {
 	(*t)[0] = x;
@@ -771,27 +848,27 @@ PRIVATE const char *basename(const char *s) {
 
 PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
 	const int w = pic->w, h = pic->h;
-	float fx, fy;
-	if(w<=h*aspect_ratio) {
-		fx = (x*h*aspect_ratio)/256  + (centered ? 0.5f*(w - h*aspect_ratio) : 0);
+	float fx, fy, k = aspect_ratio;
+	if(w<=h*k) {
+		fx = (x*h*k)/256  + (centered ? 0.5f*(w - h*k) : 0);
 		fy = (y*h)/256;
 	} else {
 		fx = (x*w)/256;
-		fy = (y*w/aspect_ratio)/256 + (centered ? 0.5f*(h - w/aspect_ratio) : 0);
+		fy = (y*w/k)/256 + (centered ? 0.5f*(h - w/k) : 0);
 	}
 	*rx = nearbyintf(fx);
 	*ry = nearbyintf(fy);
 }
 
-PRIVATE void pic_load(pic *pic, const char *filename) {
+PRIVATE int pic_load(pic *pic, const char *filename) {
 	int n;
 	
 	gettimeofday(&pic->time, NULL);
 	pic->saved_size = 0;
 	
 	if(!stbi_info(filename, &pic->w, &pic->h, &n)) {
-		fprintf(stderr, "Unsupported image: %s\n", filename);
-		exit(-1);
+		FATAL("Unsupported image: %s", filename, 0);
+		return FALSE;
 	}
 	
 	if(verbose) {	
@@ -802,23 +879,22 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 	pic->sRGB = stbi_load(filename, &pic->w, &pic->h, &n, 3);
 	
 	if(pic->sRGB == NULL)  {
-		if(verbose) printf("error\n");
-		else fprintf(stderr, "Error while loading: %s\n", filename);
-		exit(-1);
+		FATAL("Error while loading: %s", filename, 0);
+		return FALSE;
 	}
 	
 #ifdef STBIR_INCLUDE_STB_IMAGE_RESIZE2_H
 	if(hq_zoom) {
-		int w, h;
-		squale_coord(pic, 256, 256, &w, &h);
+		int w = pic->w, h = pic->h;
 		
-		if(h>w) {
-			h = (h*256)/w;
-			w = 256;
-		} else {
+		if(h>w*aspect_ratio) {
 			w = (w*256)/h;
 			h = 256;
+		} else {
+			h = (h*256)/w;
+			w = 256;
 		}
+		printf("%dx%d -> %dx%d\n", pic->w, pic->h, w, h);
 		
 		if(w!=pic->w || h!=pic->h) {
 			uint8_t *buf = stbir_resize_uint8_srgb(
@@ -833,6 +909,7 @@ PRIVATE void pic_load(pic *pic, const char *filename) {
 		}
 	}
 #endif
+	return TRUE;
 }
 
 PRIVATE void pic_save(pic *pic, const char *filename) {
@@ -912,12 +989,9 @@ PRIVATE void pic_save_png(pic *pic, const char *filename) {
 	uint8_t *buf = malloc(3*256*256), *rgb = buf;
 	int i;
 
-	if(buf==NULL) return;
+	if(buf==NULL) OUT_OF_MEM(3*256*256);
 	
-	if(f==NULL) {
-		perror(filename);
-		return;
-	}
+	if(f==NULL) {perror(filename); return;}
 	
 	if(verbose>1) {
 		printf("saving png...");
@@ -1105,9 +1179,8 @@ PRIVATE void usage(char *av0) {
 	exit(0);
 }
 
-PRIVATE void parse(int ac, char **av) {
-	int i;
-	for(i=1; i<ac; ++i) {
+PRIVATE int parse(int i, int ac, char **av) {
+	for(input_file = NULL; i<ac; ++i) {
 		if(!strcmp("?", av[i])
 		|| !strcmp("-h", av[i])
 		|| !strcmp("--help", av[i])
@@ -1155,68 +1228,51 @@ PRIVATE void parse(int ac, char **av) {
 				}
 			}
 		}
-		else if(input_file == NULL)
-			input_file = av[i];
-		else {
-			fprintf(stderr, "Unknown argument: %s\n" , av[i]);
-			exit(-1);
+		else if(*av[i] != '-') {
+			if(input_file == NULL) input_file = av[i];
+			else break;
 		}
+		else FATAL("Unknown argument: %s" , av[i], -1);
 	}
-	
-	if(input_file == NULL) {
-		fprintf(stderr, "Missing input file\n");
-		exit(-1);
-	}
+	return i;
 }
 
 int main(int ac, char **av) {
-	parse(ac, av);
+	int i = 1;
 	
 	init();
 	do {
+		const char *out;
 		pic pic;
-		char *out;
 		
-		pic_load(&pic, input_file);
+		i = parse(i, ac, av);
+		
+		if(!pic_load(&pic, input_file)) continue;
+		
+		// convert
 		pic_conv_h(NULL);
 		pic_conv_h(&pic);
-		out = output_file;
 
-		if(out==NULL) {
-			char *s;
-			out = malloc(strlen(input_file)+5);
-			if(out==NULL) {
-				perror("Out of memory");
-				exit(-1);
-			}
-			strcpy(out, input_file);
-			s = strrchr(out, '.');
-			if(s) *s = 0;
-			strcat(s, ".SQP");
-		}
-
+		//save
+		out = path_format(output_file, input_file);
 		pic_save(&pic, out);
+		
+		// overview
 		if(pgm) {
-			char *s = malloc(strlen(out)+5);
-			if(s) {
-				strcpy(s, out);
-				strcat(s, ".pgm");
-				pic_save_pgm(&pic, s);
-				free(s);
-			}
+			const char *s = path_format("%s.pgm", out);
+			pic_save_pgm(&pic, s);
+			free((void*)s);
 		}
 		if(png) {
-			char *s = malloc(strlen(out)+5);
-			if(s) {
-				strcpy(s, out);
-				strcat(s, ".png");
-				pic_save_png(&pic, s);
-				free(s);
-			}
+			const char *s = path_format("%s.png", out);
+			pic_save_png(&pic, s);
+			free((void*)s);
 		}
+		
+		// done
 		pic_done(&pic);
-		if(out != output_file) free(out);
-	} while(0);
+		free((void*)out);
+	} while(i<ac);
 	
 	return 0;
 }
