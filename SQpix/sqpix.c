@@ -319,7 +319,7 @@ PRIVATE uint8_t exo = 0;
 PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file = "%p%N.SQP";
 
-PRIVATE uint8_t centered = 1, hq_zoom = 1,  hilbert = 0;
+PRIVATE uint8_t centered = 1, hq_zoom = 1,  hilbert = 1;
 PRIVATE float aspect_ratio = 1.0f;
 
 typedef float vec3[3];
@@ -788,10 +788,10 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 			struct dith_cache new_entry; int i;
 			new_entry.key = key;
 			for(i=0; i<dith->max; ++i) new_entry.value[i] = tab[i]->index;
+			if(hmlen(dith_cache)>=32768) hmfree(dith_cache);
 			hmputs(dith_cache, new_entry);
 		} while(0);
 		
-		if(hmlen(dith_cache)>=16384) hmfree(dith_cache);
 		
 		cache = hmgetp_null(dith_cache, key);
 		assert(cache != NULL);
@@ -807,10 +807,10 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 }
 
 PRIVATE struct dith_descriptor *dith_find(char *name) {
-	int j;
-	for(j=0; dith_descriptors[j].name;++j) {
-		if(!strcmp(dith_descriptors[j].name, name)) {
-			return &dith_descriptors[j];
+	int i;
+	for(i=0; dith_descriptors[i].name;++i) {
+		if(!strcmp(dith_descriptors[i].name, name)) {
+			return &dith_descriptors[i];
 		}
 	}
 	return NULL;
@@ -1169,7 +1169,7 @@ PRIVATE void init(void) {
 			  (x>>4)&15,x&15);
 	}
 	
-	dith_descriptor = dith_find("hex"); // this one seem
+	dith_descriptor = dith_find("hex"); // this one seem pretty nice
 }
 
 PRIVATE void usage(char *av0) {
