@@ -9,7 +9,7 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v -x -z --png -r $(RATIO)
+DITH=-v -z --png -r $(RATIO)
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -146,13 +146,13 @@ SQ%.ROM: samples/%.SQP $(FLEXFLOPPY) $(CMD) forth.dir/$(FLEX_SYS) Makefile
 	@$(RM) STARTUP.TXT
 
 samples/%.SQP: samples/%.png $(BIN) Makefile
-	./$(BIN) $(DITH) $< -o $@ --png
+	./$(BIN) $(DITH) -o $@ $<
 
 samples/%.SQP: samples/%.gif $(BIN) Makefile
-	./$(BIN) $(DITH) $< -o $@ --png
+	./$(BIN) $(DITH) -o $@ $<
 
 samples/%.SQP: samples/%.jpg $(BIN) Makefile
-	./$(BIN) $(DITH) $< -o $@ --png
+	./$(BIN) $(DITH) -o $@ $<
 	
 pic_dbg: pic_tst,-debug
 

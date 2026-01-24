@@ -313,13 +313,13 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 	DITH_DESCRIPTOR("h3r",   36, dith_h3r,	     "Halftone 6x6 (rotated)"),
 	
 	{NULL}
-}, *dith_descriptor = &dith_descriptors[4];
+}, *dith_descriptor;
 
 PRIVATE uint8_t exo = 0;
 PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
 PRIVATE char *input_file, *output_file = "%p%N.SQP";
 
-PRIVATE uint8_t centered = 1, hq_zoom = 1;
+PRIVATE uint8_t centered = 1, hq_zoom = 1,  hilbert = 0;
 PRIVATE float aspect_ratio = 1.0f;
 
 typedef float vec3[3];
@@ -694,7 +694,7 @@ PRIVATE float sRGB2lin(uint8_t sRGB) {
 }	
 
 PRIVATE uint32_t dith_key(vec3 *p) {
-	const int base = 32;
+	const int base = 64;
 	return  (uint32_t)(((*p)[0]<=0 ? 0 : (*p)[0])*(base-1)) +
 		(uint32_t)(((*p)[1]<=0 ? 0 : (*p)[1])*(base-1))*base +
 		(uint32_t)(((*p)[2]<=0 ? 0 : (*p)[2])*(base-1))*base*base;
@@ -751,6 +751,7 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 	return best_t;
 }
 
+	static double total, hit;
 PRIVATE uint8_t dith(const struct dith_descriptor *dith, 
                      const int x, const int y, vec3 *p) {
 	const uint32_t key = dith_key(p);
@@ -790,6 +791,8 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 			hmputs(dith_cache, new_entry);
 		} while(0);
 		
+		if(hmlen(dith_cache)>=16384) hmfree(dith_cache);
+		
 		cache = hmgetp_null(dith_cache, key);
 		assert(cache != NULL);
 
@@ -797,8 +800,20 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 		// printf("\n");
 		// exit(0);
 	}
-	
+	else hit += 1; 
+	total += 1;
+
 	return cache->value[dith->value[(y % dith->my)*dith->mx + (x % dith->mx)]-1];
+}
+
+PRIVATE struct dith_descriptor *dith_find(char *name) {
+	int j;
+	for(j=0; dith_descriptors[j].name;++j) {
+		if(!strcmp(dith_descriptors[j].name, name)) {
+			return &dith_descriptors[j];
+		}
+	}
+	return NULL;
 }
 
 typedef struct {
@@ -1041,10 +1056,14 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 	squale_coord(pic, x-1,y-1, &x1, &y1);
 	squale_coord(pic, x+1,y+1, &x2, &y2);
 	
-	k = 1.0f/((1.0f+y2-y1)*(1.0f+x2-x1));
+	++x1; if(x1>=x2) x2 = x1+1;
+	++y1; if(y1>=x2) y2 = y1+1;
 	
+	k = 1.0f/((y2-y1)*(float)(x2-x1));
+	
+
 	vec3_set(ret, 0,0,0);
-	for(i=x1; i<=x2; ++i) for(j = y1; j<=y2; ++j) {
+	for(i=x1; i<x2; ++i) for(j = y1; j<y2; ++j) {
 		vec3_madd(ret, ret, k, pic_get_linear_color(pic, i,j, &p));
 	}
 	
@@ -1149,17 +1168,20 @@ PRIVATE void init(void) {
 			  x>>12,(x>>8)&15,
 			  (x>>4)&15,x&15);
 	}
+	
+	dith_descriptor = dith_find("hex"); // this one seem
 }
 
 PRIVATE void usage(char *av0) {
 	int i;
 	
-	printf("Usage: %s [options] <image.ext>\n", av0);
+	printf("Usage: %s [options] <image.ext> ...\n", av0);
 	printf("options:\n");
 	printf(" ?, -h, --help : Prints this help\n");
 
 	printf(" -v            : Verbose\n");
-	printf(" -o <name>     : Specify output file\n");
+	printf(" -o <name>     : Specify output file "
+		"(accepted patterns: %%s, %%p, %%n, %%e, %%N, %%E)\n");
 	printf(" -x            : same as --o4\n");
 	printf(" -z            : same as --exo\n");
 	printf(" -r <w:h>      : same as --ratio\n");
@@ -1169,7 +1191,7 @@ PRIVATE void usage(char *av0) {
 	printf(" --png         : Output png image (for preview)\n");
 	printf(" --pgm         : Output pgm image (for preview)\n");
 	printf(" --low         : Low quality resizing\n");
-	printf(" --ratio <w:h> : Sets aspect ratio\n");
+	printf(" --ratio <w:h> : Sets aspect ratio (default=1:1)\n");
 	printf("\n");
 	
 	for(i=0; dith_descriptors[i].name; ++i)
@@ -1179,7 +1201,7 @@ PRIVATE void usage(char *av0) {
 }
 
 PRIVATE int parse(int i, int ac, char **av) {
-	for(input_file = NULL; i<ac; ++i) {
+	for(input_file = NULL; i<ac && input_file==NULL; ++i) {
 		if(!strcmp("?", av[i])
 		|| !strcmp("-h", av[i])
 		|| !strcmp("--help", av[i])
@@ -1187,10 +1209,12 @@ PRIVATE int parse(int i, int ac, char **av) {
 
 		else if(!strcmp("-v", av[i])) 
 			verbose = 1;
+		else if(!strcmp("--debug", av[i])) 
+			verbose = 2;
 		else if(!strcmp("-o", av[i]) && i<ac-1)
 			output_file = av[++i];
 		else if(!strcmp("-x", av[i])) 
-			dith_descriptor = &dith_descriptors[4];
+			dith_descriptor = dith_find("o4");
 		else if(!strcmp("--exo", av[i])
                      || !strcmp("-z",   av[i]))
 			exo = 1;
@@ -1206,7 +1230,7 @@ PRIVATE int parse(int i, int ac, char **av) {
 			 )) {
 			char *s = av[++i];		
 			float x,y;
-			if(sscanf(s, "%f:%f", &x, &y)!=2) {
+			if(sscanf(s, "%f:%f", &x, &y) != 2) {
 				y = 1.0f;
 				if(sscanf(s,"%f", &x) != 1) {
 					x = y = -1.0f;
@@ -1219,25 +1243,24 @@ PRIVATE int parse(int i, int ac, char **av) {
 			aspect_ratio = fabsf(x/y);
 		} 
 		else if(!strncmp("--", av[i], 2)) {
-			int j;
-			for(j=0; dith_descriptors[j].name;++j) {
-				if(!strcmp(dith_descriptors[j].name, av[i]+2)) {
-					dith_descriptor = &dith_descriptors[j];
-					break;
-				}
-			}
+			dith_descriptor = dith_find(av[i]+2);
+			if(!dith_descriptor) FATAL("Unknown dither: --%s", av[i]+2, -1);
 		}
 		else if(*av[i] != '-') {
-			if(input_file == NULL) input_file = av[i];
-			else break;
+			FILE *f = fopen(av[i], "rb");
+			if(f) {fclose(f); input_file = av[i];}
+			else perror(av[i]);
 		}
 		else FATAL("Unknown argument: %s" , av[i], -1);
 	}
+	if(input_file == NULL) FATAL("Missing file after : %s", av[ac-1], -1);
 	return i;
 }
 
 int main(int ac, char **av) {
 	int i = 1;
+	
+	if(ac==1) usage(av[0]);
 	
 	init();
 	do {
@@ -1249,8 +1272,10 @@ int main(int ac, char **av) {
 		if(!pic_load(&pic, input_file)) continue;
 		
 		// convert
-		pic_conv_h(NULL);
-		pic_conv_h(&pic);
+		if(hilbert) {
+			pic_conv_h(NULL);
+			pic_conv_h(&pic);
+		} else pic_conv_l(&pic);
 
 		//save
 		out = path_format(output_file, input_file);
@@ -1269,6 +1294,9 @@ int main(int ac, char **av) {
 		}
 		
 		// done
+		if(verbose > 1) printf("hm=%d (%dkb, %.1f%%)...", 
+			hmlen(dith_cache),hmlen(dith_cache)*sizeof(*dith_cache)/1024, 
+			100*hit/total);
 		pic_done(&pic);
 		free((void*)out);
 	} while(i<ac);
