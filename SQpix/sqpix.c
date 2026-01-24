@@ -894,8 +894,7 @@ PRIVATE int pic_load(pic *pic, const char *filename) {
 			h = (h*256)/w;
 			w = 256;
 		}
-		printf("%dx%d -> %dx%d\n", pic->w, pic->h, w, h);
-		
+
 		if(w!=pic->w || h!=pic->h) {
 			uint8_t *buf = stbir_resize_uint8_srgb(
 				pic->sRGB, pic->w, pic->h,0,
