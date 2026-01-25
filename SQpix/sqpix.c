@@ -320,7 +320,7 @@ PRIVATE uint8_t exo  = FALSE;
 PRIVATE uint8_t verbose  = FALSE, pgm  = FALSE, png  = FALSE, gif = FALSE;
 PRIVATE char *input_file, *output_file = "%p/%N.SQP";
 
-PRIVATE uint8_t centered = 1, hq_zoom = 1,  hilbert = 1;
+PRIVATE uint8_t centered = TRUE, hq_zoom = TRUE,  hilbert = TRUE;
 PRIVATE float aspect_ratio = 1.0f;
 
 typedef float vec3[3];
@@ -706,7 +706,7 @@ PRIVATE float sRGB2lin(uint8_t sRGB) {
 
 PRIVATE uint32_t dith_key(vec3 *p) {
 	float *v = &(*p)[0];
-	const int base = 128;
+	const int base = 64;
 	return  ((uint32_t)((0.5f + v[0])*(base-1))) +
 		((uint32_t)((0.5f + v[1])*(base-1)))*base +
 		((uint32_t)((0.5f + v[2])*(base-1)))*base*base;
@@ -970,9 +970,10 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		struct membuf inbuf[1];
 		struct membuf outbuf[1];
 		struct crunch_info info[1];
-		static struct crunch_options options[1] = { CRUNCH_OPTIONS_DEFAULT };	
+		static struct crunch_options options[1] = { CRUNCH_OPTIONS_DEFAULT };
 		int i = 65536;
-
+// 21668
+// 
 		membuf_init(inbuf);
 		do {
 			--i;
@@ -1328,10 +1329,6 @@ int main(int ac, char **av) {
 			pic_conv_h(NULL);
 			pic_conv_h(&pic);
 		} else pic_conv_l(&pic);
-		if(hmlen(dith_cache)>=32768) {
-			hmfree(dith_cache);
-			dith_hit = dith_total = 0;
-		}
 
 		//save
 		out = path_format(output_file, input_file);
@@ -1386,6 +1383,11 @@ int main(int ac, char **av) {
 			100*dith_hit/dith_total);
 		pic_done(&pic);
 		free((void*)out);
+		
+		if(hmlen(dith_cache)>=32768) {
+			hmfree(dith_cache);
+			dith_hit = dith_total = 0;
+		}
 	} while(i<ac);
 	
 	return 0;

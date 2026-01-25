@@ -175,20 +175,12 @@ SQP1LP  BSR     READ
         LEAY    ,Y
         BNE     SQP1LP
         BRA     DONE
-        
-EXOCOOK LDX     #ZZZ
-        ABX
-        ASLB
-        ABX
-        LDB     ,X
-        BSR     EXOBITS
-        ADDD    1,X
-        RTS
 
 EXOBIT  LDB     #1
 EXOBITS PSHS    U               ; U=0
 EXOBUF  LDA     #1
-        BRA     EXOBIT4
+        DECB
+        BMI     EXOBIT5
 EXOBIT2 LSRA
         BNE     EXOBIT3
         BSR     READ
@@ -199,7 +191,7 @@ EXOBIT3 ROL     1,S
 EXOBIT4 DECB
         BPL     EXOBIT2
         STA     <EXOBUF+1,PCR
-        PULS    D,PC
+EXOBIT5 PULS    D,PC
 
 EXOIDX  LDB     #ZZZ/256
         CMPB    #16
@@ -215,6 +207,15 @@ EXOCPY1 BSR     READ
         LEAX    -1,X
         BNE     EXOCPY1
         BRA     EXOLOOP
+        
+EXOCOOK LDX     #ZZZ
+        ABX
+        ASLB
+        ABX
+        LDB     ,X
+        BSR     EXOBITS
+        ADDD    1,X
+        RTS
 
 EXOTAB  FCB     4,2,4,16,48,32
 
