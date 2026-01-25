@@ -8,10 +8,11 @@
 #include <math.h>
 
 #include "stb/stb_ds.h"
-
 #include "stb/stb_image.h"
 #include "stb/stb_image_resize2.h"
 #include "stb/stb_image_write.h"
+
+#include "gifenc/gifenc.h"
 
 #include "membuf_io.h"
 #include "exo_helper.h"
@@ -315,9 +316,9 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 	{NULL}
 }, *dith_descriptor;
 
-PRIVATE uint8_t exo = 0;
-PRIVATE uint8_t verbose = 0, pgm = 0, png = 0;
-PRIVATE char *input_file, *output_file = "%p%N.SQP";
+PRIVATE uint8_t exo  = FALSE;
+PRIVATE uint8_t verbose  = FALSE, pgm  = FALSE, png  = FALSE, gif = FALSE;
+PRIVATE char *input_file, *output_file = "%p/%N.SQP";
 
 PRIVATE uint8_t centered = 1, hq_zoom = 1,  hilbert = 1;
 PRIVATE float aspect_ratio = 1.0f;
@@ -325,7 +326,8 @@ PRIVATE float aspect_ratio = 1.0f;
 typedef float vec3[3];
 
 PRIVATE char flex9char(char c) {
-	if((c>='0' && c<='9')
+	if( c=='_' || c=='-'
+	|| (c>='0' && c<='9')
 	|| (c>='A' && c<='Z')) return c;
 	if((c>='a' && c<='z')) return c+'A'-'a';
 	return 0;
@@ -333,7 +335,7 @@ PRIVATE char flex9char(char c) {
 
 PRIVATE const char *path_format(const char *fmt, const char *path) {
 	const char *ext = NULL, *name = NULL, *end = NULL;
-	char *out = NULL;
+	char *out = NULL, c;
 	const char *s, *t;
 	
 	// fint name, ext, etc
@@ -363,7 +365,9 @@ PRIVATE const char *path_format(const char *fmt, const char *path) {
 			case 'n': for(t = name; t<ext; ++t) arrput(out, *t); break;
 
 			case 'P': case 'p': 
-				for(t = path; t<name; ++t) {arrput(out, *t);} break;
+				if(path==name) {arrput(out,'.');arrput(out,'/');} 
+				else for(t = path; t<name; ++t) {arrput(out, *t);} 
+				break;
 				
 			case 'E':
 				for(n = 0, t = ext; t<end && n<3; ++t) {
@@ -373,9 +377,16 @@ PRIVATE const char *path_format(const char *fmt, const char *path) {
 				break;
 				
 			case 'N':
-				for(n = 0, t = name; t<ext && n<8; ++t) {
-					char c = flex9char(*t);
-					if(c) {arrput(out, c); ++n;}
+				for(n = 0, t = name ;t<ext && n<8; ++t) {
+					c = flex9char(*t);
+					if(c) {
+						if(n==0 && (c<'A' || c>'Z')) {
+							arrput(out, 'Z');
+							++n;
+						}
+						arrput(out, c); 
+						++n;
+					}
 				}
 				break;
 				
@@ -388,8 +399,8 @@ PRIVATE const char *path_format(const char *fmt, const char *path) {
 		} else arrput(out, *s);
 	}
 	arrput(out, '\0');
-	s = strdup(out);
-	arrfree(out);
+		
+	s = strdup(out); arrfree(out);
 	if(s==NULL) OUT_OF_MEM(arrlenu(out));
 	return s;
 }
@@ -694,16 +705,18 @@ PRIVATE float sRGB2lin(uint8_t sRGB) {
 }	
 
 PRIVATE uint32_t dith_key(vec3 *p) {
-	const int base = 64;
-	return  (uint32_t)(((*p)[0]<=0 ? 0 : (*p)[0])*(base-1)) +
-		(uint32_t)(((*p)[1]<=0 ? 0 : (*p)[1])*(base-1))*base +
-		(uint32_t)(((*p)[2]<=0 ? 0 : (*p)[2])*(base-1))*base*base;
+	float *v = &(*p)[0];
+	const int base = 128;
+	return  ((uint32_t)((0.5f + v[0])*(base-1))) +
+		((uint32_t)((0.5f + v[1])*(base-1)))*base +
+		((uint32_t)((0.5f + v[2])*(base-1)))*base*base;
  }
 
 PRIVATE struct dith_cache {
 	uint32_t key;
 	uint8_t  value[128];
 } *dith_cache;
+PRIVATE double dith_total, dith_hit;
 
 PRIVATE tetra *dith_find_tetra(vec3 *p) {
 	float w0 = 0, w1 = 0, w2 = 0, w3 = 0;
@@ -751,10 +764,9 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 	return best_t;
 }
 
-	static double total, hit;
 PRIVATE uint8_t dith(const struct dith_descriptor *dith, 
                      const int x, const int y, vec3 *p) {
-	const uint32_t key = dith_key(p);
+	const uint32_t key = dith_key(p); if(key==0) return 7;
 	struct dith_cache *cache = hmgetp_null(dith_cache, key);
 	
 	assert(dith->max <= length_of(cache->value));
@@ -775,7 +787,7 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 		// printf("%g\n", vec3_dot(&q,&q));
 		
 		do {
-			int i = 0; float m = 0.5;			
+			int i = 0; float m = 0; //0.5f;			
 			m += sel[0]->weight * dith->max; while(i<m) tab[i++] = sel[0];
 			m += sel[1]->weight * dith->max; while(i<m) tab[i++] = sel[1];
 			m += sel[2]->weight * dith->max; while(i<m) tab[i++] = sel[2];
@@ -788,7 +800,6 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 			struct dith_cache new_entry; int i;
 			new_entry.key = key;
 			for(i=0; i<dith->max; ++i) new_entry.value[i] = tab[i]->index;
-			if(hmlen(dith_cache)>=32768) hmfree(dith_cache);
 			hmputs(dith_cache, new_entry);
 		} while(0);
 		
@@ -800,8 +811,8 @@ PRIVATE uint8_t dith(const struct dith_descriptor *dith,
 		// printf("\n");
 		// exit(0);
 	}
-	else hit += 1; 
-	total += 1;
+	else dith_hit += 1; 
+	dith_total += 1;
 
 	return cache->value[dith->value[(y % dith->my)*dith->mx + (x % dith->mx)]-1];
 }
@@ -926,6 +937,20 @@ PRIVATE int pic_load(pic *pic, const char *filename) {
 	return TRUE;
 }
 
+PRIVATE uint32_t pic_crc32(pic *pic) {
+	#define CRC32_POLY 0x04C11DB7
+	uint32_t crc = ~0; int i, j;
+	for(i = pic->w*pic->h*3; --i>=0;) {
+		crc ^= ((uint32_t)pic->sRGB[i]) << 24; 
+		for (j = 0; j < 8; ++j) {
+			int32_t msb = crc & 0x80000000;	
+			crc <<= 1;
+			if(msb) crc ^= CRC32_POLY;
+		}
+        }
+	return ~crc;
+}
+
 PRIVATE void pic_save(pic *pic, const char *filename) {
 	FILE *f = fopen(filename, "wb");
 	
@@ -1027,6 +1052,29 @@ PRIVATE void pic_save_png(pic *pic, const char *filename) {
 	fclose(f);
 }
 
+PRIVATE void pic_save_gif(pic *pic, const char *filename) {
+	uint8_t palette[16*3];
+	ge_GIF *gif;
+	int i;
+	
+	for(i=0; i<16; ++i) {
+		uint8_t c = (i>=8 ? HALF_INTENSITY : FULL_INTENSITY);
+		palette[3*i + 0] = i&4 ? 0 : c;
+		palette[3*i + 1] = i&2 ? 0 : c;
+		palette[3*i + 2] = i&1 ? 0 : c;
+	}
+
+	gif = ge_new_gif(filename, 256, 256, palette, 4, -1, -1);
+	if(!gif) {perror(filename); return;}
+
+	if(verbose>1) {
+		printf("saving gif...");
+		fflush(stdout);
+	}
+	memcpy(gif->frame, pic->bitmap, sizeof(pic->bitmap));
+	ge_add_frame(gif, 0);
+	ge_close_gif(gif);
+}
 
 PRIVATE vec3 *pic_get_linear_color(pic *pic, int x, int y, vec3 *ret) {
 	
@@ -1057,7 +1105,7 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 	squale_coord(pic, x+1,y+1, &x2, &y2);
 	
 	++x1; if(x1>=x2) x2 = x1+1;
-	++y1; if(y1>=x2) y2 = y1+1;
+	++y1; if(y1>=y2) y2 = y1+1;
 	
 	k = 1.0f/((y2-y1)*(float)(x2-x1));
 	
@@ -1069,6 +1117,7 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 	
 	// (*ret)[0] = x/255.0f;	
 	// (*ret)[1] = y/255.0f;	
+	// (*ret)[2] = 0;	
 			
 	return ret;
 }
@@ -1188,6 +1237,7 @@ PRIVATE void usage(char *av0) {
 	printf("\n");
 	
 	printf(" --exo         : Compresses with exomizer\n");
+	printf(" --gif         : Output gif image (for preview)\n");
 	printf(" --png         : Output png image (for preview)\n");
 	printf(" --pgm         : Output pgm image (for preview)\n");
 	printf(" --low         : Low quality resizing\n");
@@ -1217,13 +1267,15 @@ PRIVATE int parse(int i, int ac, char **av) {
 			dith_descriptor = dith_find("o4");
 		else if(!strcmp("--exo", av[i])
                      || !strcmp("-z",   av[i]))
-			exo = 1;
+			exo = TRUE;
 		else if(!strcmp("--pgm", av[i])) 
-			pgm = 1;
+			pgm = TRUE;
 		else if(!strcmp("--png", av[i])) 
-			png = 1;
+			png = TRUE;
+		else if(!strcmp("--gif", av[i])) 
+			gif = TRUE;
 		else if(!strcmp("--low", av[i])) 
-			hq_zoom = 0;
+			hq_zoom = FALSE;
 		else if(i<ac-1 && (
 			 !strcmp("--ratio", av[i]) ||
 			 !strcmp("-r", av[i])
@@ -1276,9 +1328,39 @@ int main(int ac, char **av) {
 			pic_conv_h(NULL);
 			pic_conv_h(&pic);
 		} else pic_conv_l(&pic);
+		if(hmlen(dith_cache)>=32768) {
+			hmfree(dith_cache);
+			dith_hit = dith_total = 0;
+		}
 
 		//save
 		out = path_format(output_file, input_file);
+		if(strstr(output_file, "%N") != NULL) {
+			FILE *f = fopen(out, "rb");
+			if(f) { fclose(f);
+				int32_t crc = pic_crc32(&pic) % 1291;
+				int n = strlen(out), l = n+3;
+				char *tmp = malloc(l); if(!tmp) OUT_OF_MEM(l);
+				strcpy(tmp, out);
+								
+				while(n>0 && tmp[n-1]!='/' && tmp[n-1]!='\\') --n;
+				for(l=0; tmp[n+l] && tmp[n+l]!='.'; ++l);
+				
+				if(l<8) {
+					int l2 = l;
+					
+					tmp[n + l++] = ' '; 
+					if(l<8) tmp[n + l++] = ' '; 
+					
+					strcpy(tmp + n + l, out + n + l2);
+				}
+				n += l-2;
+				l = crc%36; crc/=36; tmp[n++] = l<10? '0'+l : 'A'+l-10;
+				l = crc%36; crc/=36; tmp[n++] = l<10? '0'+l : 'A'+l-10;
+				free((void*)out);
+				out = tmp;
+			}
+		}
 		pic_save(&pic, out);
 		
 		// overview
@@ -1292,11 +1374,16 @@ int main(int ac, char **av) {
 			pic_save_png(&pic, s);
 			free((void*)s);
 		}
+		if(gif) {
+			const char *s = path_format("%s.gif", out);
+			pic_save_gif(&pic, s);
+			free((void*)s);
+		}
 		
 		// done
 		if(verbose > 1) printf("hm=%d (%dkb, %.1f%%)...", 
 			hmlen(dith_cache),hmlen(dith_cache)*sizeof(*dith_cache)/1024, 
-			100*hit/total);
+			100*dith_hit/dith_total);
 		pic_done(&pic);
 		free((void*)out);
 	} while(i<ac);

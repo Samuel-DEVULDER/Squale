@@ -16,3 +16,6 @@
 [submodule "SQpix/A09"]
 	path = SQpix/A09
 	url = https://github.com/Arakula/A09.git
+[submodule "SQpix/gifenc"]
+	path = SQpix/gifenc
+	url = https://github.com/lecram/gifenc.git

@@ -9,7 +9,7 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v -z --png -r $(RATIO)
+DITH=-v -z --gif -r $(RATIO) --debug
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -64,7 +64,7 @@ LDFLAGS=-lm
 
 OBJS = stb.o match.o search.o optimal.o output.o membuf_io.o \
        chunkpool.o radix.o exo_helper.o exodec.o progress.o \
-	   exo_util.o vec.o 
+	   exo_util.o vec.o gifenc/gifenc.o
 	   
 %.o: $(EXO2)%.c
 	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) \
