@@ -321,7 +321,7 @@ PRIVATE uint8_t verbose  = FALSE, pgm  = FALSE, png  = FALSE, gif = FALSE;
 PRIVATE char *input_file, *output_file = "%p/%N.SQP";
 
 PRIVATE uint8_t centered = TRUE, hq_zoom = TRUE,  hilbert = TRUE;
-PRIVATE float aspect_ratio = 1.0f;
+PRIVATE float aspect_ratio = 1.0f, norm_b = -1.0f, norm_w = -1.0f;
 
 typedef float vec3[3];
 
@@ -449,6 +449,11 @@ PRIVATE color palette[15];
 
 PRIVATE int float_cmp(float x, float y) {
 	return x<y ? -1 : x>y ? +1 : 0;
+}
+
+PRIVATE int intens_cmp(const void *pa, const void *pb) {
+	const float * a = pa, *b = pb;
+	return float_cmp(*a, *b);
 }
 
 PRIVATE int color_cmp_by_intens(const void *pa, const void *pb) {
@@ -706,7 +711,7 @@ PRIVATE float sRGB2lin(uint8_t sRGB) {
 
 PRIVATE uint32_t dith_key(vec3 *p) {
 	float *v = &(*p)[0];
-	const int base = 64;
+	const int base = 109;
 	return  ((uint32_t)((0.5f + v[0])*(base-1))) +
 		((uint32_t)((0.5f + v[1])*(base-1)))*base +
 		((uint32_t)((0.5f + v[2])*(base-1)))*base*base;
@@ -834,6 +839,7 @@ typedef struct {
 	uint8_t bitmap[65536];
 	struct timeval time;
 	int saved_size;
+	float norm_0, norm_1;
 } pic;
 
 PRIVATE float pic_done(pic *pic) {
@@ -886,11 +892,51 @@ PRIVATE void squale_coord(pic *pic, int x, int y, int *rx, int *ry) {
 	*ry = nearbyintf(fy);
 }
 
+PRIVATE void pic_norm(pic *pic, const float bl, const float wl) {
+	float *tab = NULL, t, w, b;
+	size_t len = pic->w*pic->h;
+	int i;
+	
+	if(bl<=0 && wl<=0) return;
+	
+	if(verbose>1) printf("normalizing ");
+
+	for(i = 3*len; (i-=3) >= 0;) {
+		float r = sRGB2lin(pic->sRGB[i+0]);
+		float g = sRGB2lin(pic->sRGB[i+1]);
+		float b = sRGB2lin(pic->sRGB[i+2]);
+		float y = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+		arrput(tab, y);
+	}
+	
+	qsort(tab, len, sizeof(tab[0]), intens_cmp);
+	
+	if(bl>=0) {
+		t = (len-1)*bl; i = floorf(t); t -= i;	
+		b = tab[i] + t*(tab[(i+1>=len)?i:i+1] - tab[i]);
+	} else	b = 0;
+	
+	if(wl>=0) {
+		t = (len-1)*wl; i = floorf(t); t -= i; 
+		w = tab[i] + t*(tab[(i+1>=len)?i:i+1] - tab[i]);
+	} else	w = 1;
+	
+	if(verbose>1) printf("%.1f%%->%.1f%%...", b*100.0f, w*100.0f);
+	
+	if(b!=0 && w!=1 && b<w) {
+		pic->norm_0 = b;
+		pic->norm_1 = sRGB2lin(255)/(w - b);
+	} else pic->norm_0 = pic->norm_1 = -1;
+	
+	arrfree(tab);
+}
+
 PRIVATE int pic_load(pic *pic, const char *filename) {
 	int n;
 	
 	gettimeofday(&pic->time, NULL);
 	pic->saved_size = 0;
+	pic->norm_0 = pic->norm_1 = -1;
 	
 	if(!stbi_info(filename, &pic->w, &pic->h, &n)) {
 		FATAL("Unsupported image: %s", filename, 0);
@@ -974,6 +1020,38 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		int i = 65536;
 // 21668
 // 
+
+// 256 256 1 46129   sqp	18m
+// 2048  256 1 45883   sqp	18m
+// 4096  256 1 45875   sqp	19m
+// 8192	 256 1 45855   sqp	21m
+//  512  512 1 44079   sqp	18m
+// 4096  512 1 43915   sqp	24m
+//  512  512 0 43419   sqp	54m
+// 2048  512 1 43927   sqp	24m
+
+//  256 1024 1 42883   sqp	26:48
+// 512  1024 1 42775   sqp	23m
+// 1024 1024 1 42695   sqp	23m
+// 2048 1024 1 42679		26m
+//  256 2048 1 42487   sqp	25m
+//  512 2048 1 42407   sqp	27m
+// 1024 2048 1 42351   sqp	29m
+// 2048 2048 1 42307   sqp	29m
+//  256 4096 1 42269   sqp	31m
+
+// 65535 65535 0 41295   sqp	200m
+// 65535 65535 1 41721   sqp 	101m
+
+
+// 512 1024 0 42235   sqp	59m
+
+
+
+		options->max_len = 256;
+		options->max_offset = 4096;
+		options->use_imprecise_rle = 1;
+
 		membuf_init(inbuf);
 		do {
 			--i;
@@ -1099,26 +1177,34 @@ PRIVATE vec3 *squale_color(pic *pic, int x, int y, vec3 *ret) {
 	if((pic->w==256 && pic->w>=pic->h)
 	|| (pic->h==256 && pic->h>=pic->w)) {
 		squale_coord(pic, x,y, &x1, &y1);
-		return pic_get_linear_color(pic, x1, y1, ret);
-	}	
-	
-	squale_coord(pic, x-1,y-1, &x1, &y1);
-	squale_coord(pic, x+1,y+1, &x2, &y2);
-	
-	++x1; if(x1>=x2) x2 = x1+1;
-	++y1; if(y1>=y2) y2 = y1+1;
-	
-	k = 1.0f/((y2-y1)*(float)(x2-x1));
-	
+		pic_get_linear_color(pic, x1, y1, ret);
+	} else {		
+		squale_coord(pic, x-1,y-1, &x1, &y1);
+		squale_coord(pic, x+1,y+1, &x2, &y2);
+		
+		++x1; if(x1>=x2) x2 = x1+1;
+		++y1; if(y1>=y2) y2 = y1+1;
+		
+		k = 1.0f/((y2-y1)*(float)(x2-x1));
+		
 
-	vec3_set(ret, 0,0,0);
-	for(i=x1; i<x2; ++i) for(j = y1; j<y2; ++j) {
-		vec3_madd(ret, ret, k, pic_get_linear_color(pic, i,j, &p));
+		vec3_set(ret, 0,0,0);
+		for(i=x1; i<x2; ++i) for(j = y1; j<y2; ++j) {
+			vec3_madd(ret, ret, k, pic_get_linear_color(pic, i,j, &p));
+		}
+		
+		// (*ret)[0] = x/255.0f;	
+		// (*ret)[1] = y/255.0f;	
+		// (*ret)[2] = 0;	
 	}
 	
-	// (*ret)[0] = x/255.0f;	
-	// (*ret)[1] = y/255.0f;	
-	// (*ret)[2] = 0;	
+	if(pic->norm_0 > 0) {
+		const float x0  = pic->norm_0, x1 = pic->norm_1;
+		float * const v = *ret, t;
+		t = (v[0]-x0)*x1; v[0] = t<=0 ? 0 : t>=1 ? 1 : t;
+		t = (v[1]-x0)*x1; v[1] = t<=0 ? 0 : t>=1 ? 1 : t;
+		t = (v[2]-x0)*x1; v[2] = t<=0 ? 0 : t>=1 ? 1 : t;
+	}
 			
 	return ret;
 }
@@ -1220,6 +1306,8 @@ PRIVATE void init(void) {
 	}
 	
 	dith_descriptor = dith_find("hex"); // this one seem pretty nice
+	aspect_ratio = 1.0f;
+	norm_w = norm_b = -1.0f;
 }
 
 PRIVATE void usage(char *av0) {
@@ -1229,24 +1317,25 @@ PRIVATE void usage(char *av0) {
 	printf("options:\n");
 	printf(" ?, -h, --help : Prints this help\n");
 
-	printf(" -v            : Verbose\n");
-	printf(" -o <name>     : Specify output file "
+	printf(" -v             : Verbose\n");
+	printf(" -o <name>      : Specify output file "
 		"(accepted patterns: %%s, %%p, %%n, %%e, %%N, %%E)\n");
-	printf(" -x            : same as --o4\n");
-	printf(" -z            : same as --exo\n");
-	printf(" -r <w:h>      : same as --ratio\n");
+	printf(" -x             : same as --o4\n");
+	printf(" -z             : same as --exo\n");
+	printf(" -r <w:h>       : same as --ratio\n");
 	printf("\n");
 	
-	printf(" --exo         : Compresses with exomizer\n");
-	printf(" --gif         : Output gif image (for preview)\n");
-	printf(" --png         : Output png image (for preview)\n");
-	printf(" --pgm         : Output pgm image (for preview)\n");
-	printf(" --low         : Low quality resizing\n");
-	printf(" --ratio <w:h> : Sets aspect ratio (default=1:1)\n");
+	printf(" --exo          : Compresses with exomizer\n");
+	printf(" --gif          : Output gif image (for preview)\n");
+	printf(" --png          : Output png image (for preview)\n");
+	printf(" --pgm          : Output pgm image (for preview)\n");
+	printf(" --low          : Low quality resizing\n");
+	printf(" --ratio <w:h>  : Sets aspect ratio (default=1:1)\n");
+	printf(" --norm [<b:w>] : Normalize levels (typical=1.0:99.9)\n");
 	printf("\n");
 	
 	for(i=0; dith_descriptors[i].name; ++i)
-	printf(" --%-11s : %s\n", dith_descriptors[i].name, dith_descriptors[i].desc);
+	printf(" --%-12s : %s\n", dith_descriptors[i].name, dith_descriptors[i].desc);
 	
 	exit(0);
 }
@@ -1277,6 +1366,17 @@ PRIVATE int parse(int i, int ac, char **av) {
 			gif = TRUE;
 		else if(!strcmp("--low", av[i])) 
 			hq_zoom = FALSE;
+		else if(!strcmp("--norm", av[i])) {
+			char *s = i<ac-1 ? av[i+1] : NULL;
+			float x = -1, y = -1;
+			if(s && 2==sscanf(s, "%f:%f", &x, &y)) {++i;}   else
+			if(s && 1==sscanf(s, ":%f", &y)) {x = -1; ++i;} else
+			if(s && 1==sscanf(s, "%f:", &x)) {y = -1; ++i;}
+			else {x = 1.0f; y = 99.9f;}
+			norm_b = x< 0 || x>=100 ? -1 : x/100.0f;
+			norm_w = y<=0 || y> 100 ? -1 : y/100.0f;
+			if(0 <= norm_w && norm_w <= norm_b) norm_b = norm_w = -1;
+		} 
 		else if(i<ac-1 && (
 			 !strcmp("--ratio", av[i]) ||
 			 !strcmp("-r", av[i])
@@ -1323,6 +1423,8 @@ int main(int ac, char **av) {
 		i = parse(i, ac, av);
 		
 		if(!pic_load(&pic, input_file)) continue;
+		
+		pic_norm(&pic, norm_b, norm_w);
 		
 		// convert
 		if(hilbert) {
