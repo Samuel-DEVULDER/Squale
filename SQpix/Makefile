@@ -9,7 +9,8 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v --zx0 --gif -r $(RATIO) --debug
+DITH=-v --norm --zx0 --gif -r $(RATIO) --debug
+# --debug
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -69,23 +70,24 @@ OBJS = stb.o match.o search.o optimal.o output.o membuf_io.o \
 	   shrink.o divsufsort.o sssort.o trsort.o expand.o matchfinder.o
 	   
 %.o: $(EXO2)%.c
-	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) \
-	$< && cp $< ..
-	   
+	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) $< && cp $< ..
+	
+%.o: $(ZX0)%.c
+%.o: $(ZX0)/libdivsufsort/lib/%.c
+   
 %$(EXE): %.o deps $(OBJS) $(SHARED_OBJS)
 	@echo "Linking $@"
 	@$(CC) $(LDFLAGS) -o $@ $< $(OBJS) $(SHARED_OBJS)
 
 myclean:
-	-@$(RM) $(BIN) $(OBJS) $(SHARED_OBJS) $(ALL:$(EXE)=.o) $(ALL) >/dev/null 2>&1
-	-@cd $(EXO2) && $(MAKE) -f Makefile clean >/dev/null 2>&1 
+	-$(RM) $(BIN) $(OBJS) $(SHARED_OBJS) $(ALL:$(EXE)=.o) $(ALL) >/dev/null 2>&1 
+#	-@cd $(EXO2) && $(MAKE) -f Makefile clean >/dev/null 2>&1 
 
 test: $(BIN) 
-	-@rm samples/*.sqp.png 2>/dev/null
-	@for i in samples/*.{png,jpg,gif}; do\
-		x=`echo $$i | sed -e s/[\\.].*$$/.sqp/`; \
-		./$(BIN) -z -v $(DITH) --png "$$i" -o "$$x"; \
-	done
+	-@rm samples/*.SQP* 2>/dev/null
+	@time ./$(BIN) $(DITH) --gif samples/*.{png,jpg,gif}; echo
+	@echo -n "kb    : ";du        -c samples/*.SQP | tail -1
+	@echo -n "blocs : ";du -B 252 -c samples/*.SQP | tail -1
 
 %.CMD: %.ASM $(A09)
 	@echo "Assembling $< to $@..."
@@ -120,7 +122,7 @@ ROM=SQ$(PIC).ROM
 
 pic: $(ROM) forth.zip
 pic_clean:
-	-$(RM) -rf $(ROM) samples/SQ$(PIC).SQP  forth.dir forth.zip
+	-$(RM) -rf $(ROM) samples/SQ$(PIC).SQP*  forth.dir forth.zip
 
 %.zip:
 	@echo "Retreiving $@ from system-cfg..."

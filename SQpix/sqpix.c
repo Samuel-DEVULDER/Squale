@@ -1117,7 +1117,7 @@ PRIVATE void pic_save_pgm(pic *pic, const char *filename) {
 	}
 	
 	if(verbose>1) {
-		printf("saving pgm...");
+		printf("saving %s...", basename(filename));
 		fflush(stdout);
 	}
 	
@@ -1142,7 +1142,7 @@ PRIVATE void pic_save_png(pic *pic, const char *filename) {
 	if(f==NULL) {perror(filename); return;}
 	
 	if(verbose>1) {
-		printf("saving png...");
+		printf("saving %s...", basename(filename));
 		fflush(stdout);
 	}
 	
@@ -1177,7 +1177,7 @@ PRIVATE void pic_save_gif(pic *pic, const char *filename) {
 	if(!gif) {perror(filename); return;}
 
 	if(verbose>1) {
-		printf("saving gif...");
+		printf("saving %s...", basename(filename));
 		fflush(stdout);
 	}
 	memcpy(gif->frame, pic->bitmap, sizeof(pic->bitmap));
@@ -1513,8 +1513,9 @@ int main(int ac, char **av) {
 		}
 		
 		// done
-		if(verbose > 1) printf("hm=%d (%dkb, %.1f%%)...", 
-			hmlen(dith_cache),hmlen(dith_cache)*sizeof(*dith_cache)/1024, 
+		if(verbose > 1) printf("(MAP=%d entries, %dkb, %.1f%%)...", 
+			hmlen(dith_cache),
+			(hmlen(dith_cache)*sizeof(*dith_cache))/1024, 
 			100*dith_hit/dith_total);
 		pic_done(&pic);
 		free((void*)out);
