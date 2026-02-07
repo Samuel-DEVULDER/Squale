@@ -9,7 +9,7 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v -z --gif -r $(RATIO) --debug
+DITH=-v --zx0 --gif -r $(RATIO) --debug
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -21,8 +21,9 @@ CP=cp
 7Z=7z
 
 EXO2=exomizer/exomizer2/src
+ZX0=salvador/src
 
-VPATH=.:$(EXO2)/
+VPATH=.:$(EXO2)/:$(ZX0)/:$(ZX0)/libdivsufsort/lib/
 
 DATE:=$(shell date +%FT%T%Z || date)
 OS:=$(shell uname -o | tr "/" "_")
@@ -59,12 +60,13 @@ include $(EXO2)/Makefile
 
 clean: myclean pic_clean
 
-CC:=$(CC) -I$(EXO2)/ -I. $(EXTRA)
+CC:=$(CC) -I$(EXO2)/ -I$(ZX0)/ -I$(ZX0)/libdivsufsort/include -I. $(EXTRA)
 LDFLAGS=-lm
 
 OBJS = stb.o match.o search.o optimal.o output.o membuf_io.o \
        chunkpool.o radix.o exo_helper.o exodec.o progress.o \
-	   exo_util.o vec.o gifenc/gifenc.o
+	   exo_util.o vec.o gifenc/gifenc.o \
+	   shrink.o divsufsort.o sssort.o trsort.o expand.o matchfinder.o
 	   
 %.o: $(EXO2)%.c
 	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) \

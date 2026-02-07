@@ -19,3 +19,6 @@
 [submodule "SQpix/gifenc"]
 	path = SQpix/gifenc
 	url = https://github.com/lecram/gifenc.git
+[submodule "SQpix/salvador"]
+	path = SQpix/salvador
+	url = https://github.com/emmanuel-marty/salvador.git

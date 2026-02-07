@@ -14,6 +14,8 @@
 
 #include "gifenc/gifenc.h"
 
+#include "salvador/src/libsalvador.h"
+
 #include "membuf_io.h"
 #include "exo_helper.h"
 
@@ -316,7 +318,7 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 	{NULL}
 }, *dith_descriptor;
 
-PRIVATE uint8_t exo  = FALSE;
+PRIVATE uint8_t exo  = FALSE, zx0 = FALSE;
 PRIVATE uint8_t verbose  = FALSE, pgm  = FALSE, png  = FALSE, gif = FALSE;
 PRIVATE char *input_file, *output_file = "%p/%N.SQP";
 
@@ -1010,9 +1012,37 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 		fflush(stdout);
 	}
 	
-	fprintf(f, exo ? "SQP\2" : "SQP\1");
+	fprintf(f, zx0 ? "SQP\3" : exo ? "SQP\2" : "SQP\1");
 	
-	if(exo) {
+	if(zx0) {
+		size_t nOriginalSize = 65536, 
+		       nCompressedSize = 0, 
+		       nMaxWindowSize = 0,
+		       nMaxCompressedSize;
+                int nFlags = 0;
+		
+		uint8_t *in, *out;
+		int i;
+		
+		in = malloc(nOriginalSize);
+		if(!in) OUT_OF_MEM(nOriginalSize);
+		
+		nMaxCompressedSize = salvador_get_max_compressed_size(nOriginalSize);
+		out = malloc(nMaxCompressedSize);
+		if(!out) OUT_OF_MEM(nMaxCompressedSize);
+
+		for(i=0; i<nOriginalSize; ++i) in[i] = pic->bitmap[i ^ 0x00FF];
+		
+		memset(out, 0, nMaxCompressedSize);
+		nCompressedSize = salvador_compress(in, out, nOriginalSize, nMaxCompressedSize, nFlags, nMaxWindowSize, 0, NULL, NULL);
+		 
+		if(nCompressedSize==(size_t)-1)
+		FATAL("Failed to compress %s", filename, -1);	
+		free(in);
+
+		fwrite(out, 1, nCompressedSize, f);
+		free(out);
+	} else if(exo) {
 		struct membuf inbuf[1];
 		struct membuf outbuf[1];
 		struct crunch_info info[1];
@@ -1048,9 +1078,9 @@ PRIVATE void pic_save(pic *pic, const char *filename) {
 
 
 
-		options->max_len = 256;
-		options->max_offset = 4096;
-		options->use_imprecise_rle = 1;
+//		options->max_len = 256;
+//		options->max_offset = 4096;
+//		options->use_imprecise_rle = 1;
 
 		membuf_init(inbuf);
 		do {
@@ -1326,6 +1356,7 @@ PRIVATE void usage(char *av0) {
 	printf("\n");
 	
 	printf(" --exo          : Compresses with exomizer\n");
+	printf(" --zx0          : Compresses with ZX0/Salvador\n");
 	printf(" --gif          : Output gif image (for preview)\n");
 	printf(" --png          : Output png image (for preview)\n");
 	printf(" --pgm          : Output pgm image (for preview)\n");
@@ -1358,6 +1389,8 @@ PRIVATE int parse(int i, int ac, char **av) {
 		else if(!strcmp("--exo", av[i])
                      || !strcmp("-z",   av[i]))
 			exo = TRUE;
+		else if(!strcmp("--zx0", av[i]))
+			zx0 = TRUE;
 		else if(!strcmp("--pgm", av[i])) 
 			pgm = TRUE;
 		else if(!strcmp("--png", av[i])) 
