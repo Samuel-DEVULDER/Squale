@@ -9,7 +9,7 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v --norm --zx0 --gif -r $(RATIO) --debug
+DITH=-v --gif -r $(RATIO) --debug
 # --debug
 #  --vac -o8x8 --c5x5b --o3x3
 
@@ -54,7 +54,7 @@ BIN=sqpix$(EXE)
 
 ALL=$(BIN) $(CMD)
 
-all: $(BIN) $(CMD)
+all: $(OBJS) $(BIN) $(CMD)
 	ls -l $^
 
 include $(EXO2)/Makefile
@@ -70,10 +70,14 @@ OBJS = stb.o match.o search.o optimal.o output.o membuf_io.o \
 	   shrink.o divsufsort.o sssort.o trsort.o expand.o matchfinder.o
 	   
 %.o: $(EXO2)%.c
-	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) $< && cp $< ..
+
+#	cd $(EXO2) && make CC=$(CC) CFLAGS=$(CFLAGS) $< && cp $< ..
 	
 %.o: $(ZX0)%.c
+
 %.o: $(ZX0)/libdivsufsort/lib/%.c
+
+%.o: $(ZX0)/gifenc/%.c
    
 %$(EXE): %.o deps $(OBJS) $(SHARED_OBJS)
 	@echo "Linking $@"

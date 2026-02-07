@@ -40,6 +40,8 @@
 #define HALF_INTENSITY	157
 // #define HALF_INTENSITY	127
 
+#define DITH_MAX		64
+
 PRIVATE uint8_t dith_vac[8][8] = {
 	{40,61, 2,39,19,43,23, 8},
 	{12,20,32,49,58,13,51,56},
@@ -713,15 +715,15 @@ PRIVATE float sRGB2lin(uint8_t sRGB) {
 
 PRIVATE uint32_t dith_key(vec3 *p) {
 	float *v = &(*p)[0];
-	const int base = 109;
-	return  ((uint32_t)((0.5f + v[0])*(base-1))) +
-		((uint32_t)((0.5f + v[1])*(base-1)))*base +
-		((uint32_t)((0.5f + v[2])*(base-1)))*base*base;
+	const int base = 96;//109;
+	return  base*base*(uint32_t)(0.5f + v[0]*(base-1))
+		+    base*(uint32_t)(0.5f + v[1]*(base-1))
+		+         (uint32_t)(0.5f + v[2]*(base-1));
  }
 
 PRIVATE struct dith_cache {
 	uint32_t key;
-	uint8_t  value[128];
+	uint8_t  value[DITH_MAX];
 } *dith_cache;
 PRIVATE double dith_total, dith_hit;
 
@@ -773,8 +775,20 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 
 PRIVATE uint8_t dith(const struct dith_descriptor *dith, 
                      const int x, const int y, vec3 *p) {
-	const uint32_t key = dith_key(p); if(key==0) return 7;
-	struct dith_cache *cache = hmgetp_null(dith_cache, key);
+	const uint32_t key = dith_key(p); 
+	struct dith_cache *cache;
+	
+	if(key==0) return 7;
+
+	cache = hmgetp_null(dith_cache, key);
+	
+	if(dith->max > length_of(cache->value)) {
+		int max = dith->max, i;
+		*(uint8_t*)&dith->max = length_of(cache->value);
+		uint8_t *p = dith->value;
+		for(i = dith->mx*dith->my; --i>=0;)
+			p[i] = (p[i]*dith->max*2 + max)/(2*max);
+	}
 	
 	assert(dith->max <= length_of(cache->value));
 
