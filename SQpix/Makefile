@@ -9,8 +9,8 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v --gif -r $(RATIO) --debug
-# --debug
+DITH=-v --gif -x -r $(RATIO) --debug --zx0
+# --debug --no-cache
 #  --vac -o8x8 --c5x5b --o3x3
 
 STRIP=strip
@@ -54,7 +54,7 @@ BIN=sqpix$(EXE)
 
 ALL=$(BIN) $(CMD)
 
-all: $(OBJS) $(BIN) $(CMD)
+all: $(ALL)
 	ls -l $^
 
 include $(EXO2)/Makefile
@@ -87,7 +87,7 @@ myclean:
 	-$(RM) $(BIN) $(OBJS) $(SHARED_OBJS) $(ALL:$(EXE)=.o) $(ALL) >/dev/null 2>&1 
 #	-@cd $(EXO2) && $(MAKE) -f Makefile clean >/dev/null 2>&1 
 
-test: $(BIN) 
+test: $(BIN) $(OBJS) $(SHARED_OBJS)
 	-@rm samples/*.SQP* 2>/dev/null
 	@time ./$(BIN) $(DITH) --gif samples/*.{png,jpg,gif}; echo
 	@echo -n "kb    : ";du        -c samples/*.SQP | tail -1

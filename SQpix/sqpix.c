@@ -320,11 +320,11 @@ PRIVATE struct dith_descriptor dith_descriptors[] = {
 	{NULL}
 }, *dith_descriptor;
 
-PRIVATE uint8_t exo  = FALSE, zx0 = FALSE;
+PRIVATE uint8_t exo  = FALSE, zx0 = FALSE, use_cache = TRUE;
 PRIVATE uint8_t verbose  = FALSE, pgm  = FALSE, png  = FALSE, gif = FALSE;
 PRIVATE char *input_file, *output_file = "%p/%N.SQP";
 
-PRIVATE uint8_t centered = TRUE, hq_zoom = TRUE,  hilbert = TRUE;
+PRIVATE uint8_t centered = TRUE, hq_zoom = TRUE,  hilbert = FALSE;
 PRIVATE float aspect_ratio = 1.0f, norm_b = -1.0f, norm_w = -1.0f;
 
 typedef float vec3[3];
@@ -775,12 +775,12 @@ PRIVATE tetra *dith_find_tetra(vec3 *p) {
 
 PRIVATE uint8_t dith(const struct dith_descriptor *dith, 
                      const int x, const int y, vec3 *p) {
-	const uint32_t key = dith_key(p); 
+	const uint32_t key = use_cache ? dith_key(p) : 1; 
 	struct dith_cache *cache;
 	
-	if(key==0) return 7;
+	if(key == 0) return 7; // let black be black in space of cache reduing colors
 
-	cache = hmgetp_null(dith_cache, key);
+	cache = use_cache ? hmgetp_null(dith_cache, key) : NULL;
 	
 	if(dith->max > length_of(cache->value)) {
 		int max = dith->max, i;
@@ -1377,6 +1377,7 @@ PRIVATE void usage(char *av0) {
 	printf(" --low          : Low quality resizing\n");
 	printf(" --ratio <w:h>  : Sets aspect ratio (default=1:1)\n");
 	printf(" --norm [<b:w>] : Normalize levels (typical=1.0:99.9)\n");
+	printf(" --no-cache     : Disable dither cache\n");
 	printf("\n");
 	
 	for(i=0; dith_descriptors[i].name; ++i)
@@ -1400,6 +1401,8 @@ PRIVATE int parse(int i, int ac, char **av) {
 			output_file = av[++i];
 		else if(!strcmp("-x", av[i])) 
 			dith_descriptor = dith_find("o4");
+		else if(!strcmp("--no-cache", av[i])) 
+			use_cache = FALSE;
 		else if(!strcmp("--exo", av[i])
                      || !strcmp("-z",   av[i]))
 			exo = TRUE;
@@ -1478,8 +1481,11 @@ int main(int ac, char **av) {
 			pic_conv_h(NULL);
 			pic_conv_h(&pic);
 		} else pic_conv_l(&pic);
+		if(verbose > 1 && use_cache) printf("%d cache entries (%dkb, %.1f%%)...", 
+			hmlen(dith_cache),
+			(hmlen(dith_cache)*sizeof(*dith_cache))/1024, 
+			100*dith_hit/dith_total);
 
-		//save
 		out = path_format(output_file, input_file);
 		if(strstr(output_file, "%N") != NULL) {
 			FILE *f = fopen(out, "rb");
@@ -1507,8 +1513,7 @@ int main(int ac, char **av) {
 				out = tmp;
 			}
 		}
-		pic_save(&pic, out);
-		
+
 		// overview
 		if(pgm) {
 			const char *s = path_format("%s.pgm", out);
@@ -1526,15 +1531,14 @@ int main(int ac, char **av) {
 			free((void*)s);
 		}
 		
+		// save
+		pic_save(&pic, out);
+		
 		// done
-		if(verbose > 1) printf("(MAP=%d entries, %dkb, %.1f%%)...", 
-			hmlen(dith_cache),
-			(hmlen(dith_cache)*sizeof(*dith_cache))/1024, 
-			100*dith_hit/dith_total);
 		pic_done(&pic);
 		free((void*)out);
 		
-		if(hmlen(dith_cache)>=32768) {
+		if(hmlen(dith_cache)>=65536) {
 			hmfree(dith_cache);
 			dith_hit = dith_total = 0;
 		}
