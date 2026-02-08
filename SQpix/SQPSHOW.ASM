@@ -422,12 +422,11 @@ ZX0NEWO BSR	ZX0ELIA
 	LBRA	DONE
 ZX0NEW1 JSR	1,U	; READ
 
-        EORA    #$FE
-        ADDA    #2
+        EORA    #$FE    ; B*128-(A>>1)
+        ADDA    #2      ; 
         ADCB    #$FF
-
 	LSRB		; NOTE B and A are swapped
-	RORA
+	RORA            ; BIT0 will be passed to ZX0ELIB
         
 	STA	<ZX0OFFS+2,PCR ; faster than EXG + STD
 	STB	<ZX0OFFS+1,PCR

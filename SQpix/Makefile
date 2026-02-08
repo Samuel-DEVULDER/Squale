@@ -9,7 +9,7 @@ PIC=HNY2026
 # PIC=BART
 # PIC=TIGRE
 RATIO=1
-DITH=-v --gif -x -r $(RATIO) --debug --zx0
+DITH=-v --gif -x -r $(RATIO) --debug --exo
 # --debug --no-cache
 #  --vac -o8x8 --c5x5b --o3x3
 
